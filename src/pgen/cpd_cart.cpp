@@ -40,29 +40,33 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 		    AthenaArray<Real> &cons_scalar);
-void CentrifugalForce(MeshBlock *pmb, const Real time, const Real dt,
-              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-		      AthenaArray<Real> &cons_scalar);
+//void OrbiterGravity(MeshBlock *pmb, const Real time, const Real dt,
+//              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+//              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+//		    AthenaArray<Real> &cons_scalar);
 namespace {
 void GetCylCoord(Coordinates *pco,Real &rad,Real &phi,Real &z,int i,int j,int k);
 Real DenProfileCyl(const Real rad, const Real phi, const Real z);
 Real PoverR(const Real rad, const Real phi, const Real z);
 Real VelProfileCyl(const Real rad, const Real phi, const Real z);
 // problem parameters which are useful to make global to this file
-Real gm0, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, gm_planet;
+Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, gm_planet;
 Real dfloor;
 Real Omega0;
   
 } // namespace
 
 // User-defined boundary conditions for disk simulations
-void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+void DiskCartInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh);
-
-// User-defined boundary conditions for disk simulations
-void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+void DiskCartOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+                 Real time, Real dt,
+                 int il, int iu, int jl, int ju, int kl, int ku, int ngh);
+void DiskCartInnerX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+                 Real time, Real dt,
+                 int il, int iu, int jl, int ju, int kl, int ku, int ngh);
+void DiskCartOuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 
@@ -79,9 +83,9 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceF
 void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   EnrollUserExplicitSourceFunction(PrimaryGravity);
-  EnrollUserExplicitSourceFunction(CentrifugalForce);
+  //EnrollUserExplicitSourceFunction(OrbiterGravity);
   // Get parameters for gravitatonal potential of central point mass
-  gm0 = pin->GetOrAddReal("problem","GM_s",0.0); // primary gravitational constant
+  //gm1 = pin->GetOrAddReal("problem","GM_s",0.0); // primary gravitational constant
   r0 = pin->GetOrAddReal("problem","r0",1.0);
 
   // Get parameters for initial density and velocity
@@ -103,10 +107,16 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
-    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
+    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskCartInnerX1);
   }
   if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user")) {
-    EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
+    EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskCartOuterX1);
+  }
+  if (mesh_bcs[BoundaryFace::inner_x2] == GetBoundaryFlag("user")) {
+    EnrollUserBoundaryFunction(BoundaryFace::inner_x2, DiskCartInnerX2);
+  }
+  if (mesh_bcs[BoundaryFace::outer_x2] == GetBoundaryFlag("user")) {
+    EnrollUserBoundaryFunction(BoundaryFace::outer_x2, DiskCartOuterX2);
   }
 
   return;
@@ -118,13 +128,13 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 //========================================================================================
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
-  Real rad(0.0), phi(0.0), z(0.0);
+  Real rad, phi, z;
   Real den, vel;
   Real x1, x2, x3;
-  Real x, y, Cx, Cy;
+  Real Cx, Cy;
   Real radp, phip;
 
-  OrbitalVelocityFunc &vK = porb->OrbitalVelocity;
+  //OrbitalVelocityFunc &vK = porb->OrbitalVelocity;
   //  Initialize density and momenta
   for (int k=ks; k<=ke; ++k) {
     x3 = pcoord->x3v(k);
@@ -132,60 +142,45 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       x2 = pcoord->x2v(j);
       for (int i=is; i<=ie; ++i) {
         x1 = pcoord->x1v(i);
-        GetCylCoord(pcoord,rad,phi,z,i,j,k); // convert to cylindrical coordinates
-	x = rad*std::cos(phi);
-	y = rad*std::sin(phi);
-
 	// calculate relative to the primary
-	radp = std::sqrt(std::pow(rad, 2) + 1 - 2*rad*std::cos(phi));
-	phip = 3.14159265358979323846 - std::atan2(y, 1-x);
-
+	radp = sqrt(x2*x2+(1+x1)*(1+x1));
+	phip = std::atan2(x2, 1+x1);
         // compute initial conditions in cylindrical coordinates
 	// relative to primary
         den = DenProfileCyl(radp,phip,z);
         vel = VelProfileCyl(radp,phip,z);
-
         //if (porb->orbital_advection_defined)
         //  vel -= vK(porb, x1, x2, x3);
         phydro->u(IDN,k,j,i) = den;
-        if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-
-	  Cx = y/radp;
-	  Cy = -(1-x)/radp;
-
-	  phydro->u(IM1,k,j,i) = den*vel*(std::sin(phi)*Cy + std::cos(phi)*Cx);
-	  phydro->u(IM2,k,j,i) = den*vel*(std::cos(phi)*Cy - std::sin(phi)*Cx);
-	  //phydro->u(IM1,k,j,i) = den*vel*Cx;
-	  //phydro->u(IM2,k,j,i) = den*vel*Cy;
-          //phydro->u(IM1,k,j,i) = 0.0;
-	  //phydro->u(IM2,k,j,i) = den*vel;
-          phydro->u(IM3,k,j,i) = 0.0;
-        } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-          phydro->u(IM2,k,j,i) = 0.0;
-          phydro->u(IM3,k,j,i) = den*vel;
-        }
-
+	Cx = x2/radp;
+	Cy = -(1+x1)/radp;
+	phydro->u(IM1,k,j,i) = den*vel*Cx;
+	phydro->u(IM2,k,j,i) = den*vel*Cy;
+        phydro->u(IM3,k,j,i) = 0.0;
         if (NON_BAROTROPIC_EOS) {
-          Real p_over_r = PoverR(rad,phi,z);
+          Real p_over_r = PoverR(radp,phip,z);
           phydro->u(IEN,k,j,i) = p_over_r*phydro->u(IDN,k,j,i)/(gamma_gas - 1.0);
-          phydro->u(IEN,k,j,i) += 0.5*(SQR(phydro->u(IM1,k,j,i))+SQR(phydro->u(IM2,k,j,i))
+          phydro->u(IEN,k,j,i) += 0.5*(SQR(phydro->u(IM1,k,j,i))
+				       +SQR(phydro->u(IM2,k,j,i))
                                        + SQR(phydro->u(IM3,k,j,i)))/phydro->u(IDN,k,j,i);
-        }
+	}
       }
     }
   }
-
   return;
 }
 
 namespace {
 //----------------------------------------------------------------------------------------
-//! transform to cylindrical coordinate
+//! transform to cylindrical coordinate FROM CARTESIAN
 
 void GetCylCoord(Coordinates *pco,Real &rad,Real &phi,Real &z,int i,int j,int k) {
-  if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-    rad=pco->x1v(i);
-    phi=pco->x2v(j);
+  Real x, y;
+  if (std::strcmp(COORDINATE_SYSTEM, "cartesian") == 0) {
+    x=pco->x1v(i);
+    y=pco->x2v(i);
+    rad=sqrt(x*x+y*y);
+    phi=atan2(y, x);
     z=pco->x3v(k);
   } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
     rad=std::abs(pco->x1v(i)*std::sin(pco->x2v(j)));
@@ -224,7 +219,8 @@ Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
   Real p_over_r = PoverR(rad, phi, z);
   Real vel = (dslope+pslope)*p_over_r/(1./rad) + (1.0+pslope)
              - pslope*rad/std::sqrt(rad*rad+z*z);
-  vel = std::sqrt(1./rad)*std::sqrt(vel) - rad*Omega0;
+  // Omega=1
+  vel = std::sqrt(1./rad)*std::sqrt(vel);
   return vel;
 }
 } // namespace
@@ -232,116 +228,117 @@ Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
 //----------------------------------------------------------------------------------------
 //! User-defined boundary Conditions: sets solution in ghost zones to initial values
 
-void DiskInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
+void DiskCartInnerX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
-  Real rad(0.0), phi(0.0), z(0.0);
-  Real vel, x, y, radp, phip, Cx, Cy, den;
-  OrbitalVelocityFunc &vK = pmb->porb->OrbitalVelocity;
-  if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
-          GetCylCoord(pco,rad,phi,z,il-i,j,k);
-	  x = rad*std::cos(phi);
-	  y = rad*std::sin(phi);
-
-	  // calculate relative to the primary
-	  radp = std::sqrt(std::pow(rad, 2) + 1 - 2*rad*std::cos(phi));
-	  phip = 3.14159265358979323846 - std::atan2(y, 1-x);
-
-	  Cx = y/radp;
-	  Cy = -(1-x)/radp;
-
-          den = DenProfileCyl(radp,phip,z);
-          prim(IDN,k,j,il-i) = den;
-          vel = VelProfileCyl(radp,phip,z);
-
-          if (pmb->porb->orbital_advection_defined)
-            vel -= vK(pmb->porb, pco->x1v(il-i), pco->x2v(j), pco->x3v(k));
-	  if (prim(IM1,k,j,il) > 0){prim(IM1,k,j,il-i) = 0.0;}
-	  else {prim(IM1,k,j,il-i) = prim(IM1,k,j,il);}
-          prim(IM2,k,j,il-i) = vel*(std::cos(phi)*Cy - std::sin(phi)*Cx);
-          prim(IM3,k,j,il-i) = 0.0;
-          if (NON_BAROTROPIC_EOS)
-            prim(IEN,k,j,il-i) = PoverR(rad, phi, z)*prim(IDN,k,j,il-i);
-        }
-      }
-    }
-  } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
-          GetCylCoord(pco,rad,phi,z,il-i,j,k);
-          prim(IDN,k,j,il-i) = DenProfileCyl(rad,phi,z);
-          vel = VelProfileCyl(rad,phi,z);
-          if (pmb->porb->orbital_advection_defined)
-            vel -= vK(pmb->porb, pco->x1v(il-i), pco->x2v(j), pco->x3v(k));
-          prim(IM1,k,j,il-i) = 0.0;
-          prim(IM2,k,j,il-i) = 0.0;
-          prim(IM3,k,j,il-i) = vel;
-          if (NON_BAROTROPIC_EOS)
-            prim(IEN,k,j,il-i) = PoverR(rad, phi, z)*prim(IDN,k,j,il-i);
-        }
+  Real rad, phi, z;
+  Real vel, x1, x2, x3, radp, phip, den, Cx, Cy;
+  for (int k=kl; k<=ku; ++k) {
+    x3 = pco->x3v(k);
+    for (int j=1; j<=ngh; ++j) {
+      x2 = pco->x2v(jl-j);
+      for (int i=il; i<=iu; ++i) {
+	x1 = pco->x1v(i);
+	// calculate relative to the primary
+	radp = sqrt(x2*x2+(1+x1)*(1+x1));
+	phip = std::atan2(x2, 1+x1);
+	Cx = x2/radp;
+	Cy = -(1+x1)/radp;
+        den = DenProfileCyl(radp,phip,z);
+        prim(IDN,k,jl-j,i) = den;
+        vel = VelProfileCyl(radp,phip,z);
+	prim(IVX,k,jl-j,i) = vel*Cx;
+	prim(IVY,k,jl-j,i) = vel*Cy;
+        prim(IVZ,k,jl-j,i) = 0.0;
+        if (NON_BAROTROPIC_EOS)
+	  prim(IEN,k,jl-j,i) = PoverR(radp, phip, z)*prim(IDN,k,jl-j,i);
       }
     }
   }
 }
 
-//----------------------------------------------------------------------------------------
-//! User-defined boundary Conditions: sets solution in ghost zones to initial values
-
-void DiskOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
+void DiskCartOuterX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
                  Real time, Real dt,
                  int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
-  Real rad(0.0), phi(0.0), z(0.0);
-  Real vel, x, y, radp, phip, den, Cx, Cy;
-  OrbitalVelocityFunc &vK = pmb->porb->OrbitalVelocity;
-  if (std::strcmp(COORDINATE_SYSTEM, "cylindrical") == 0) {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
-          GetCylCoord(pco,rad,phi,z,iu+i,j,k);
-	  x = rad*std::cos(phi);
-	  y = rad*std::sin(phi);
-
-	  // calculate relative to the primary
-	  radp = std::sqrt(std::pow(rad, 2) + 1 - 2*rad*std::cos(phi));
-	  phip = 3.14159265358979323846 - std::atan2(y, 1-x);
-
-	  Cx = y/radp;
-	  Cy = -(1-x)/radp;
-
-          den = DenProfileCyl(radp,phip,z);
-          prim(IDN,k,j,iu+i) = den;
-          vel = VelProfileCyl(radp,phip,z);
-          //if (pmb->porb->orbital_advection_defined)
-          //  vel -= vK(pmb->porb, pco->x1v(iu+i), pco->x2v(j), pco->x3v(k));
-	  prim(IM1,k,j,iu+i) = vel*(std::sin(phi)*Cy + std::cos(phi)*Cx);
-	  prim(IM2,k,j,iu+i) = vel*(std::cos(phi)*Cy - std::sin(phi)*Cx);
-	  //prim(IM1,k,j,iu+i) = vel*Cx;
-	  //prim(IM2,k,j,iu+i) = vel*Cy;
-          prim(IM3,k,j,iu+i) = 0.0;
-          if (NON_BAROTROPIC_EOS)
-            prim(IEN,k,j,iu+i) = PoverR(rad, phi, z)*prim(IDN,k,j,iu+i);
-        }
+  Real rad, phi, z;
+  Real vel, x1, x2, x3, radp, phip, den, Cx, Cy;
+  for (int k=kl; k<=ku; ++k) {
+    x3 = pco->x3v(k);
+    for (int j=1; j<=ngh; ++j) {
+      x2 = pco->x2v(ju+j);
+      for (int i=il; i<=iu; ++i) {
+	x1 = pco->x1v(i);
+	// calculate relative to the primary
+	radp = sqrt(x2*x2+(1+x1)*(1+x1));
+	phip = std::atan2(x2, 1+x1);
+	Cx = x2/radp;
+	Cy = -(1+x1)/radp;
+        den = DenProfileCyl(radp,phip,z);
+        prim(IDN,k,ju+j,i) = den;
+        vel = VelProfileCyl(radp,phip,z);
+	prim(IVX,k,ju+j,i) = vel*Cx;
+	prim(IVY,k,ju+j,i) = vel*Cy;
+        prim(IVZ,k,ju+j,i) = 0.0;
+        if (NON_BAROTROPIC_EOS)
+	  prim(IEN,k,ju+j,i) = PoverR(radp, phip, z)*prim(IDN,k,ju+j,i);
       }
     }
-  } else if (std::strcmp(COORDINATE_SYSTEM, "spherical_polar") == 0) {
-    for (int k=kl; k<=ku; ++k) {
-      for (int j=jl; j<=ju; ++j) {
-        for (int i=1; i<=ngh; ++i) {
-          GetCylCoord(pco,rad,phi,z,iu+i,j,k);
-          prim(IDN,k,j,iu+i) = DenProfileCyl(rad,phi,z);
-          vel = VelProfileCyl(rad,phi,z);
-          if (pmb->porb->orbital_advection_defined)
-            vel -= vK(pmb->porb, pco->x1v(iu+i), pco->x2v(j), pco->x3v(k));
-          prim(IM1,k,j,iu+i) = 0.0;
-          prim(IM2,k,j,iu+i) = 0.0;
-          prim(IM3,k,j,iu+i) = vel;
-          if (NON_BAROTROPIC_EOS)
-            prim(IEN,k,j,iu+i) = PoverR(rad, phi, z)*prim(IDN,k,j,iu+i);
-        }
+  }
+}
+
+void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
+                 Real time, Real dt,
+                 int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
+  Real rad, phi, z;
+  Real vel, x1, x2, x3, radp, phip, den, Cx, Cy;
+  for (int k=kl; k<=ku; ++k) {
+    x3 = pco->x3v(k);
+    for (int j=jl; j<=ju; ++j) {
+      x2 = pco->x2v(j);
+      for (int i=1; i<=ngh; ++i) {
+	x1 = pco->x1v(il-i);
+	// calculate relative to the primary
+	radp = sqrt(x2*x2+(1+x1)*(1+x1));
+	phip = std::atan2(x2, 1+x1);
+	Cx = x2/radp;
+	Cy = -(1+x1)/radp;
+        den = DenProfileCyl(radp,phip,z);
+        prim(IDN,k,j,il-i) = den;
+        vel = VelProfileCyl(radp,phip,z);
+	prim(IVX,k,j,il-i) = vel*Cx;
+	prim(IVY,k,j,il-i) = vel*Cy;
+        prim(IVZ,k,j,il-i) = 0.0;
+        if (NON_BAROTROPIC_EOS)
+	  prim(IEN,k,j,il-i) = PoverR(radp, phip, z)*prim(IDN,k,j,il-i);
+      }
+    }
+  }
+}
+
+void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
+                 Real time, Real dt,
+                 int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
+  Real rad, phi, z;
+  Real vel, x1, x2, x3, radp, phip, den, Cx, Cy;
+  for (int k=kl; k<=ku; ++k) {
+    x3 = pco->x3v(k);
+    for (int j=jl; j<=ju; ++j) {
+      x2 = pco->x2v(j);
+      for (int i=1; i<=ngh; ++i) {
+	x1 = pco->x1v(iu);
+	// calculate relative to the primary
+	radp = sqrt(x2*x2+(1+x1)*(1+x1));
+	phip = std::atan2(x2, 1+x1);
+	Cx = x2/radp;
+	Cy = -(1+x1)/radp;
+        den = DenProfileCyl(radp,phip,z);
+        prim(IDN,k,j,iu+i) = den;
+        vel = VelProfileCyl(radp,phip,z);
+	prim(IVX,k,j,iu+i) = vel*Cx;
+	prim(IVY,k,j,iu+i) = vel*Cy;
+        prim(IVZ,k,j,iu+i) = 0.0;
+        if (NON_BAROTROPIC_EOS)
+	  prim(IEN,k,j,iu+i) = PoverR(radp, phip, z)*prim(IDN,k,j,iu+i);
       }
     }
   }
@@ -362,44 +359,45 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
     for (int j = pmb->js; j <= pmb->je; ++j) {
       x2 = pmb->pcoord->x2v(j);
       for (int i = pmb->is; i <= pmb->ie; ++i) {
-	den = prim(IDN,k,j,i);
         x1 = pmb->pcoord->x1v(i);
+	den = prim(IDN,k,j,i);
 	// implement primary source term here
 	// GM* = 1
 	// R = 1
-	l = std::sqrt(std::pow(x1, 2) + 1 - 2*x1*std::cos(x2));
-	Fx = ((1-x1*std::cos(x2))/l)/l/l; //std::pow(l,3);
-	Fy = (x1*std::sin(x2)/l)/l/l; ///std::pow(l,3);
-	cons(IM1,k,j,i) -= dt*den*(std::sin(x2)*Fy + std::cos(x2)*Fx);
-	cons(IM2,k,j,i) -= dt*den*(std::cos(x2)*Fy - std::sin(x2)*Fx);
+	// Omega =1
+	l = sqrt(x2*x2+(1+x1)*(1+x1));
+	Fx = ((1+x1)/l)*(1/l/l);
+	Fy = (x2/l)*(1/l/l);
+	cons(IM1,k,j,i) -= dt*den*Fx;
+	cons(IM2,k,j,i) -= dt*den*Fy;
       }
     }
   }
   return;
 }
 
-void CentrifugalForce(MeshBlock *pmb, const Real time, const Real dt,
-              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-		    AthenaArray<Real> &cons_scalar){
-  Real l, x1, x2, x3, Cx, Cy, den;
-  for (int k = pmb->ks; k <= pmb->ke; ++k) {
-    x3 = pmb->pcoord->x3v(k);
-    for (int j = pmb->js; j <= pmb->je; ++j) {
-      x2 = pmb->pcoord->x2v(j);
-      for (int i = pmb->is; i <= pmb->ie; ++i) {
-	den = prim(IDN,k,j,i);
-        x1 = pmb->pcoord->x1v(i);
-	// implement primary source term here
-	// GM* = 1
-	// R = 1
-	l = std::sqrt(std::pow(x1, 2) + 1 - 2*x1*std::cos(x2));
-	Cx = 0.;//x1*(1-x1*std::cos(x2))/l;
-	Cy = 0.;//x1*x1*std::sin(x2)/l;
-	cons(IM1,k,j,i) += dt*den*(std::sin(x2)*Cy + std::cos(x2)*Cx);
-	cons(IM2,k,j,i) += dt*den*(std::cos(x2)*Cy - std::sin(x2)*Cx);
-      }
-    }
-  }
-  return;
-}
+//void OrbiterGravity(MeshBlock *pmb, const Real time, const Real dt,
+//              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+//              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+//		    AthenaArray<Real> &cons_scalar){
+//  Real l, x1, x2, x3, Fx, Fy, den;
+//  for (int k = pmb->ks; k <= pmb->ke; ++k) {
+//    x3 = pmb->pcoord->x3v(k);
+//    for (int j = pmb->js; j <= pmb->je; ++j) {
+//      x2 = pmb->pcoord->x2v(j);
+//      for (int i = pmb->is; i <= pmb->ie; ++i) {
+//        x1 = pmb->pcoord->x1v(i);
+//	den = prim(IDN,k,j,i);
+//	// implement primary source term here
+//	// GM* = 1
+//	// R = 1
+//	l = sqrt(x2*x2+x1*x1);
+//	Fx = (x1/l)/l/l; //std::pow(l,3);
+//	Fy = (x2/l)/l/l; ///std::pow(l,3);
+//	cons(IM1,k,j,i) -= gm1*dt*den*Fx;
+//	cons(IM2,k,j,i) -= gm1*dt*den*Fy;
+//      }
+//    }
+//  }
+//  return;
+//}
