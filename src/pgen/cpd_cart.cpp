@@ -220,10 +220,40 @@ Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
   Real vel = (dslope+pslope)*p_over_r/(1./rad) + (1.0+pslope)
              - pslope*rad/std::sqrt(rad*rad+z*z);
   // Omega=1
-  vel = std::sqrt(1./rad)*std::sqrt(vel);
+  vel = -std::sqrt(1./rad)*std::sqrt(vel)+rad;
   return vel;
 }
 } // namespace
+
+void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
+              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
+              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
+		    AthenaArray<Real> &cons_scalar){
+  Real l, x1, x2, x3, Fx, Fy, den;
+  Real vx, vy;
+  for (int k = pmb->ks; k <= pmb->ke; ++k) {
+    x3 = pmb->pcoord->x3v(k);
+    for (int j = pmb->js; j <= pmb->je; ++j) {
+      x2 = pmb->pcoord->x2v(j);
+      for (int i = pmb->is; i <= pmb->ie; ++i) {
+        x1 = pmb->pcoord->x1v(i);
+	den = prim(IDN,k,j,i);
+	vx = prim(IVX,k,j,i);
+	vy = prim(IVY,k,j,i);
+	// implement primary source term here
+	// GM* = 1
+	// R = 1
+	// Omega =1
+	l = sqrt(x2*x2+(1+x1)*(1+x1));
+	Fx = ((1+x1)/l)*(1/l/l-l)-2*vy;
+	Fy = (x2/l)*(1/l/l-l)+2*vx;
+	cons(IM1,k,j,i) -= dt*den*Fx;
+	cons(IM2,k,j,i) -= dt*den*Fy;
+      }
+    }
+  }
+  return;
+}
 
 //----------------------------------------------------------------------------------------
 //! User-defined boundary Conditions: sets solution in ghost zones to initial values
@@ -342,38 +372,6 @@ void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
       }
     }
   }
-}
-
-// Do this in cylindrical geometry, be sure to check for it. Check out
-// pointmass.cpp:33 to see how they implement the source term for a
-// point mass at the origin. Should be straightforward to modify,
-// however in that example they only have to modify cons(IM1,k,j,i),
-// i.e. the momentum along r.
-void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
-              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-		    AthenaArray<Real> &cons_scalar){
-  Real l, x1, x2, x3, Fx, Fy, den;
-  for (int k = pmb->ks; k <= pmb->ke; ++k) {
-    x3 = pmb->pcoord->x3v(k);
-    for (int j = pmb->js; j <= pmb->je; ++j) {
-      x2 = pmb->pcoord->x2v(j);
-      for (int i = pmb->is; i <= pmb->ie; ++i) {
-        x1 = pmb->pcoord->x1v(i);
-	den = prim(IDN,k,j,i);
-	// implement primary source term here
-	// GM* = 1
-	// R = 1
-	// Omega =1
-	l = sqrt(x2*x2+(1+x1)*(1+x1));
-	Fx = ((1+x1)/l)*(1/l/l);
-	Fy = (x2/l)*(1/l/l);
-	cons(IM1,k,j,i) -= dt*den*Fx;
-	cons(IM2,k,j,i) -= dt*den*Fy;
-      }
-    }
-  }
-  return;
 }
 
 //void OrbiterGravity(MeshBlock *pmb, const Real time, const Real dt,
