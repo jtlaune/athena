@@ -40,19 +40,15 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 		    AthenaArray<Real> &cons_scalar);
-//void OrbiterGravity(MeshBlock *pmb, const Real time, const Real dt,
-//              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-//              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-//		    AthenaArray<Real> &cons_scalar);
+
 namespace {
-void GetCylCoord(Coordinates *pco,Real &rad,Real &phi,Real &z,int i,int j,int k);
-Real DenProfileCyl(const Real rad, const Real phi, const Real z);
-Real PoverR(const Real rad, const Real phi, const Real z);
-Real VelProfileCyl(const Real rad, const Real phi, const Real z);
-// problem parameters which are useful to make global to this file
-Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, gm_planet;
-Real dfloor;
-Real Omega0;
+  void GetCylCoord(Coordinates *pco,Real &rad,Real &phi,Real &z,int i,int j,int k);
+  Real DenProfileCyl(const Real rad, const Real phi, const Real z);
+  Real PoverR(const Real rad, const Real phi, const Real z);
+  Real VelProfileCyl(const Real rad, const Real phi, const Real z);
+  // problem parameters which are useful to make global to this file
+  Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, soft_length;
+  Real dfloor, denl, wg, wt, OmegaP;
   
 } // namespace
 
@@ -83,14 +79,17 @@ void DiskCartOuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,F
 void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   EnrollUserExplicitSourceFunction(PrimaryGravity);
-  //EnrollUserExplicitSourceFunction(OrbiterGravity);
-  // Get parameters for gravitatonal potential of central point mass
-  //gm1 = pin->GetOrAddReal("problem","GM_s",0.0); // primary gravitational constant
-  r0 = pin->GetOrAddReal("problem","r0",1.0);
 
-  // Get parameters for initial density and velocity
+  // Get parameters 
+  gm1 = pin->GetOrAddReal("problem","GM_s",0.0); 
+  r0 = pin->GetOrAddReal("problem","r0",1.0);
+  soft_length = pin->GetReal("problem","soft_length");
+  denl = pin->GetReal("problem","den_gap");
+  wg = pin->GetReal("problem","wg");
+  wt = pin->GetReal("problem","wt");
   rho0 = pin->GetReal("problem","rho0");
   dslope = pin->GetOrAddReal("problem","dslope",0.0);
+  OmegaP = pin->GetReal("problem","Omega_P");
 
   // Get parameters of initial pressure and cooling parameters
   if (NON_BAROTROPIC_EOS) {
@@ -102,8 +101,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   }
   Real float_min = std::numeric_limits<float>::min();
   dfloor=pin->GetOrAddReal("hydro","dfloor",(1024*(float_min)));
-
-  Omega0 = pin->GetOrAddReal("orbital_advection","Omega0",0.0);
 
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
@@ -143,8 +140,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       for (int i=is; i<=ie; ++i) {
         x1 = pcoord->x1v(i);
 	// calculate relative to the primary
-	radp = sqrt(x2*x2+(1+x1)*(1+x1));
-	phip = std::atan2(x2, 1+x1);
+	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	phip = std::atan2(x2, r0+x1);
         // compute initial conditions in cylindrical coordinates
 	// relative to primary
         den = DenProfileCyl(radp,phip,z);
@@ -153,7 +150,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         //  vel -= vK(porb, x1, x2, x3);
         phydro->u(IDN,k,j,i) = den;
 	Cx = x2/radp;
-	Cy = -(1+x1)/radp;
+	Cy = -(r0+x1)/radp;
 	phydro->u(IM1,k,j,i) = den*vel*Cx;
 	phydro->u(IM2,k,j,i) = den*vel*Cy;
         phydro->u(IM3,k,j,i) = 0.0;
@@ -194,13 +191,23 @@ void GetCylCoord(Coordinates *pco,Real &rad,Real &phi,Real &z,int i,int j,int k)
 //! computes density in cylindrical coordinates
 
 Real DenProfileCyl(const Real rad, const Real phi, const Real z) {
-  Real den;
+  //Real den;
+  Real denmid;
+  //Real denmid = rho0*std::pow(rad/r0,dslope);
   Real p_over_r = p0_over_r0;
+  Real DRdp = std::abs(rad-r0);
   if (NON_BAROTROPIC_EOS) p_over_r = PoverR(rad, phi, z);
-  Real denmid = rho0*std::pow(rad/r0,dslope);
-  Real dentem = denmid*std::exp(1./p_over_r*(1./std::sqrt(SQR(rad)+SQR(z))-1./rad));
-  den = dentem;
-  return std::max(den,dfloor);
+  if (DRdp >= wg) {
+    denmid = denl + (rho0-denl)/2*(2-exp((wg-DRdp)/wt));
+  }
+  else {
+    denmid = denl + (rho0-denl)/2*exp((DRdp-wg)/wt);
+  }
+  Real dentem = denmid*std::pow(rad/r0,dslope)*std::exp(1./p_over_r*(1./std::sqrt(SQR(rad)+SQR(z))-1./rad));
+  //Real dentem = denmid;
+  //Real dentem = denmid;
+  //den = dentem;
+  return std::max(dentem,dfloor);
 }
 
 //----------------------------------------------------------------------------------------
@@ -220,7 +227,8 @@ Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
   Real vel = (dslope+pslope)*p_over_r/(1./rad) + (1.0+pslope)
              - pslope*rad/std::sqrt(rad*rad+z*z);
   // Omega=1
-  vel = -std::sqrt(1./rad)*std::sqrt(vel)+rad;
+  //vel = -std::sqrt(1./rad)*std::sqrt(vel)+OmegaP*rad;
+  vel = -std::sqrt(1./rad)+OmegaP*rad;
   return vel;
 }
 } // namespace
@@ -230,7 +238,7 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 		    AthenaArray<Real> &cons_scalar){
   Real l, x1, x2, x3, Fx, Fy, den;
-  Real vx, vy;
+  Real vx, vy, r, rs;
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
     x3 = pmb->pcoord->x3v(k);
     for (int j = pmb->js; j <= pmb->je; ++j) {
@@ -240,15 +248,22 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
 	den = prim(IDN,k,j,i);
 	vx = prim(IVX,k,j,i);
 	vy = prim(IVY,k,j,i);
-	// implement primary source term here
+	// implement source term here
 	// GM* = 1
 	// R = 1
 	// Omega =1
-	l = sqrt(x2*x2+(1+x1)*(1+x1));
-	Fx = ((1+x1)/l)*(1/l/l-l)-2*vy;
-	Fy = (x2/l)*(1/l/l-l)+2*vx;
+	l = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	Fx = ((r0+x1)/l)*(1/l/l-OmegaP*OmegaP*l)-2*OmegaP*vy;
+	Fy = (x2/l)*(1/l/l-OmegaP*OmegaP*l)+2*OmegaP*vx;
 	cons(IM1,k,j,i) -= dt*den*Fx;
 	cons(IM2,k,j,i) -= dt*den*Fy;
+
+	r = sqrt(x1*x1+x2*x2);
+	rs = sqrt(x1*x1+x2*x2+soft_length*soft_length);
+	Fx = (-gm1*x1/r)/rs/rs;
+        Fy = (-gm1*x2/r)/rs/rs;
+	cons(IM1,k,j,i) += dt*den*Fx;
+	cons(IM2,k,j,i) += dt*den*Fy;
       }
     }
   }
@@ -270,10 +285,10 @@ void DiskCartInnerX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
       for (int i=il; i<=iu; ++i) {
 	x1 = pco->x1v(i);
 	// calculate relative to the primary
-	radp = sqrt(x2*x2+(1+x1)*(1+x1));
-	phip = std::atan2(x2, 1+x1);
+	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	phip = std::atan2(x2, r0+x1);
 	Cx = x2/radp;
-	Cy = -(1+x1)/radp;
+	Cy = -(r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,jl-j,i) = den;
         vel = VelProfileCyl(radp,phip,z);
@@ -299,10 +314,10 @@ void DiskCartOuterX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
       for (int i=il; i<=iu; ++i) {
 	x1 = pco->x1v(i);
 	// calculate relative to the primary
-	radp = sqrt(x2*x2+(1+x1)*(1+x1));
-	phip = std::atan2(x2, 1+x1);
+	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	phip = std::atan2(x2, r0+x1);
 	Cx = x2/radp;
-	Cy = -(1+x1)/radp;
+	Cy = -(r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,ju+j,i) = den;
         vel = VelProfileCyl(radp,phip,z);
@@ -328,10 +343,10 @@ void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
       for (int i=1; i<=ngh; ++i) {
 	x1 = pco->x1v(il-i);
 	// calculate relative to the primary
-	radp = sqrt(x2*x2+(1+x1)*(1+x1));
-	phip = std::atan2(x2, 1+x1);
+	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	phip = std::atan2(x2, r0+x1);
 	Cx = x2/radp;
-	Cy = -(1+x1)/radp;
+	Cy = -(r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,j,il-i) = den;
         vel = VelProfileCyl(radp,phip,z);
@@ -357,10 +372,10 @@ void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
       for (int i=1; i<=ngh; ++i) {
 	x1 = pco->x1v(iu);
 	// calculate relative to the primary
-	radp = sqrt(x2*x2+(1+x1)*(1+x1));
-	phip = std::atan2(x2, 1+x1);
+	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	phip = std::atan2(x2, r0+x1);
 	Cx = x2/radp;
-	Cy = -(1+x1)/radp;
+	Cy = -(r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,j,iu+i) = den;
         vel = VelProfileCyl(radp,phip,z);
