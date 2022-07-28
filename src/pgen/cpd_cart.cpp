@@ -227,8 +227,8 @@ Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
   Real vel = (dslope+pslope)*p_over_r/(1./rad) + (1.0+pslope)
              - pslope*rad/std::sqrt(rad*rad+z*z);
   // Omega=1
-  //vel = -std::sqrt(1./rad)*std::sqrt(vel)+OmegaP*rad;
-  vel = -std::sqrt(1./rad)+OmegaP*rad;
+  vel = -std::sqrt(1./rad)*std::sqrt(vel)+OmegaP*rad;
+  //vel = -std::sqrt(1./rad)+OmegaP*rad;
   return vel;
 }
 } // namespace
