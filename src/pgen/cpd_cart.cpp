@@ -149,8 +149,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         //if (porb->orbital_advection_defined)
         //  vel -= vK(porb, x1, x2, x3);
         phydro->u(IDN,k,j,i) = den;
-	Cx = x2/radp;
-	Cy = -(r0+x1)/radp;
+	Cx = -x2/radp;
+	Cy = (r0+x1)/radp;
 	phydro->u(IM1,k,j,i) = den*vel*Cx;
 	phydro->u(IM2,k,j,i) = den*vel*Cy;
         phydro->u(IM3,k,j,i) = 0.0;
@@ -227,7 +227,7 @@ Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
   Real vel = (dslope+pslope)*p_over_r/(1./rad) + (1.0+pslope)
              - pslope*rad/std::sqrt(rad*rad+z*z);
   // Omega=1
-  vel = -std::sqrt(1./rad)*std::sqrt(vel)+OmegaP*rad;
+  vel = std::sqrt(1./rad)*std::sqrt(vel)-OmegaP*rad;
   //vel = -std::sqrt(1./rad)+OmegaP*rad;
   return vel;
 }
@@ -260,8 +260,8 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
 
 	r = sqrt(x1*x1+x2*x2);
 	rs = sqrt(x1*x1+x2*x2+soft_length*soft_length);
-	Fx = (-gm1*x1/r)/rs/rs;
-        Fy = (-gm1*x2/r)/rs/rs;
+	Fx = (-gm1*x1/rs)/rs/rs;
+        Fy = (-gm1*x2/rs)/rs/rs;
 	cons(IM1,k,j,i) += dt*den*Fx;
 	cons(IM2,k,j,i) += dt*den*Fy;
       }
@@ -287,8 +287,8 @@ void DiskCartInnerX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	// calculate relative to the primary
 	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
 	phip = std::atan2(x2, r0+x1);
-	Cx = x2/radp;
-	Cy = -(r0+x1)/radp;
+	Cx = -x2/radp;
+	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,jl-j,i) = den;
         vel = VelProfileCyl(radp,phip,z);
@@ -316,8 +316,8 @@ void DiskCartOuterX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	// calculate relative to the primary
 	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
 	phip = std::atan2(x2, r0+x1);
-	Cx = x2/radp;
-	Cy = -(r0+x1)/radp;
+	Cx = -x2/radp;
+	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,ju+j,i) = den;
         vel = VelProfileCyl(radp,phip,z);
@@ -345,8 +345,8 @@ void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	// calculate relative to the primary
 	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
 	phip = std::atan2(x2, r0+x1);
-	Cx = x2/radp;
-	Cy = -(r0+x1)/radp;
+	Cx = -x2/radp;
+	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,j,il-i) = den;
         vel = VelProfileCyl(radp,phip,z);
@@ -374,8 +374,8 @@ void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	// calculate relative to the primary
 	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
 	phip = std::atan2(x2, r0+x1);
-	Cx = x2/radp;
-	Cy = -(r0+x1)/radp;
+	Cx = -x2/radp;
+	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
         prim(IDN,k,j,iu+i) = den;
         vel = VelProfileCyl(radp,phip,z);

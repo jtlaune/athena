@@ -18,22 +18,22 @@ dt          = 1.    # time increment between outputs
 <time>
 cfl_number  = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
 nlim        = -1        # cycle limit
-tlim        = 200.     # time limit
+tlim        = 10.     # time limit
 integrator  = vl2       # time integration algorithm
 xorder      = 2         # order of spatial reconstruction
 ncycle_out  = 1         # interval for stdout summary info
 
 <mesh>
 nx1         = 256             # Number of zones in X1-direction
-x1min       = -3.            # minimum value of X1
-x1max       = 3.            # maximum value of X2
+x1min       = -0.5            # minimum value of X1
+x1max       = 0.5            # maximum value of X2
 ix1_bc      = user	      # Inner-X1 boundary condition flag
 ox1_bc      = user          # Outer-X1 boundary condition flag
 x1rat       = 1.0         # non-uniform grid ratio
 
 nx2         = 256            # Number of zones in X2-direction
-x2min       = -3.             # minimum value of X2
-x2max       = 3.  	       # maximum value of X2
+x2min       = -0.5             # minimum value of X2
+x2max       = 0.5  	       # maximum value of X2
 ix2_bc      = user       # Inner-X2 boundary condition flag
 ox2_bc      = user 	    # Outer-X2 boundary condition flag
 
@@ -64,15 +64,16 @@ pfloor          = 1.e-9
 #Omega0      =  0.  # angular velocity of the system
 
 <problem>
-GM_s	    = 0.001
+GM_s	    = 0.0
 soft_length = 0.1
 rho0        = 1.
 den_gap	    = 1.
-wg	    = 1.
-wt	    = 0.2
-r0          = 10.0
+wg	    = 0.3
+wt	    = 0.1
+r0          = 1.0
 p0_over_r0  = 0.01
 p0overr0    = 0.01
 pslope      = -0.5
 dslope      = -2.25
-Omega_P	    = 0.0316227766017
+Omega_P	    = 1.0
+nu_iso      = 0.0
