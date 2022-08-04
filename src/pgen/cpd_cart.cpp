@@ -43,6 +43,8 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
 
 namespace {
   void GetCylCoord(Coordinates *pco,Real &rad,Real &phi,Real &z,int i,int j,int k);
+  Real dDRdpdr(const Real rad);
+  Real dDendr(const Real rad);
   Real DenProfileCyl(const Real rad, const Real phi, const Real z);
   Real PoverR(const Real rad, const Real phi, const Real z);
   Real VelProfileCyl(const Real rad, const Real phi, const Real z);
@@ -88,7 +90,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   wg = pin->GetReal("problem","wg");
   wt = pin->GetReal("problem","wt");
   rho0 = pin->GetReal("problem","rho0");
-  dslope = pin->GetOrAddReal("problem","dslope",0.0);
+  //dslope = pin->GetOrAddReal("problem","dslope",0.0);
   OmegaP = pin->GetReal("problem","Omega_P");
 
   // Get parameters of initial pressure and cooling parameters
@@ -194,20 +196,19 @@ Real DenProfileCyl(const Real rad, const Real phi, const Real z) {
   //Real den;
   Real denmid;
   //Real denmid = rho0*std::pow(rad/r0,dslope);
-  Real p_over_r = p0_over_r0;
   Real DRdp = std::abs(rad-r0);
-  if (NON_BAROTROPIC_EOS) p_over_r = PoverR(rad, phi, z);
+  //Real p_over_r = p0_over_r0;
+  //if (NON_BAROTROPIC_EOS) p_over_r = PoverR(rad, phi, z);
   if (DRdp >= wg) {
     denmid = denl + (rho0-denl)/2*(2-exp((wg-DRdp)/wt));
   }
   else {
     denmid = denl + (rho0-denl)/2*exp((DRdp-wg)/wt);
   }
-  Real dentem = denmid*std::pow(rad/r0,dslope)*std::exp(1./p_over_r*(1./std::sqrt(SQR(rad)+SQR(z))-1./rad));
   //Real dentem = denmid;
   //Real dentem = denmid;
   //den = dentem;
-  return std::max(dentem,dfloor);
+  return std::max(denmid,dfloor);
 }
 
 //----------------------------------------------------------------------------------------
@@ -221,14 +222,28 @@ Real PoverR(const Real rad, const Real phi, const Real z) {
 
 //----------------------------------------------------------------------------------------
 //! computes rotational velocity in cylindrical coordinates
+  Real dDRdpdr(const Real rad) {
+    if (rad < r0) {
+      return -1;
+    } else {
+      return 1;
+    }
+  }
+
+  Real dDendr(const Real rad) {
+    Real DRdp = std::abs(rad-r0);
+    if (DRdp >= wg) {
+      return 0.5*(rho0-denl)/wt*exp((-DRdp+wg)/wt)*dDRdpdr(rad);
+    } else {
+      return 0.5*(rho0-denl)/wt*exp((DRdp-wg)/wt)*dDRdpdr(rad);
+    }
+  }
 
 Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
   Real p_over_r = PoverR(rad, phi, z);
-  Real vel = (dslope+pslope)*p_over_r/(1./rad) + (1.0+pslope)
-             - pslope*rad/std::sqrt(rad*rad+z*z);
-  // Omega=1
-  vel = std::sqrt(1./rad)*std::sqrt(vel)-OmegaP*rad;
-  //vel = -std::sqrt(1./rad)+OmegaP*rad;
+  Real den = DenProfileCyl(rad, phi, z);
+  Real vel = 1/rad + rad/den*p_over_r*dDendr(rad);
+  vel = std::sqrt(vel)-OmegaP*rad;
   return vel;
 }
 } // namespace
@@ -388,29 +403,3 @@ void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
     }
   }
 }
-
-//void OrbiterGravity(MeshBlock *pmb, const Real time, const Real dt,
-//              const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
-//              const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-//		    AthenaArray<Real> &cons_scalar){
-//  Real l, x1, x2, x3, Fx, Fy, den;
-//  for (int k = pmb->ks; k <= pmb->ke; ++k) {
-//    x3 = pmb->pcoord->x3v(k);
-//    for (int j = pmb->js; j <= pmb->je; ++j) {
-//      x2 = pmb->pcoord->x2v(j);
-//      for (int i = pmb->is; i <= pmb->ie; ++i) {
-//        x1 = pmb->pcoord->x1v(i);
-//	den = prim(IDN,k,j,i);
-//	// implement primary source term here
-//	// GM* = 1
-//	// R = 1
-//	l = sqrt(x2*x2+x1*x1);
-//	Fx = (x1/l)/l/l; //std::pow(l,3);
-//	Fy = (x2/l)/l/l; ///std::pow(l,3);
-//	cons(IM1,k,j,i) -= gm1*dt*den*Fx;
-//	cons(IM2,k,j,i) -= gm1*dt*den*Fy;
-//      }
-//    }
-//  }
-//  return;
-//}

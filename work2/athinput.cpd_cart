@@ -9,16 +9,16 @@ problem_id  = cpd_cart 	# problem ID: basename of output filenames
 <output1>
 file_type   = hdf5 	# VTK data dump
 variable    = cons      #
-dt          = 1.    # time increment between outputs
+dt          = 0.1    # time increment between outputs
 
 <output2>
 file_type   = hst       # History data dump
-dt          = 1.    # time increment between outputs
+dt          = 0.1   # time increment between outputs
 
 <time>
 cfl_number  = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
 nlim        = -1        # cycle limit
-tlim        = 10.     # time limit
+tlim        = 1.     # time limit
 integrator  = vl2       # time integration algorithm
 xorder      = 2         # order of spatial reconstruction
 ncycle_out  = 1         # interval for stdout summary info
@@ -64,16 +64,14 @@ pfloor          = 1.e-9
 #Omega0      =  0.  # angular velocity of the system
 
 <problem>
-GM_s	    = 0.0
-soft_length = 0.1
+GM_s	    = 0.01
+soft_length = 0.05
 rho0        = 1.
-den_gap	    = 1.
-wg	    = 0.3
-wt	    = 0.1
+den_gap	    = 0.2
+wg	    = 0.15
+wt	    = 0.05
 r0          = 1.0
 p0_over_r0  = 0.01
-p0overr0    = 0.01
-pslope      = -0.5
-dslope      = -2.25
+pslope      = 0.
 Omega_P	    = 1.0
 nu_iso      = 0.0
