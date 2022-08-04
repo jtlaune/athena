@@ -50,7 +50,7 @@ namespace {
   Real VelProfileCyl(const Real rad, const Real phi, const Real z);
   // problem parameters which are useful to make global to this file
   Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, soft_length;
-  Real dfloor, denl, wg, wt, OmegaP;
+  Real dfloor, denl, wg, wt, OmegaP, tau_damp;
   
 } // namespace
 
@@ -92,6 +92,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   rho0 = pin->GetReal("problem","rho0");
   //dslope = pin->GetOrAddReal("problem","dslope",0.0);
   OmegaP = pin->GetReal("problem","Omega_P");
+  tau_damp = pin->GetReal("problem","T_damp");
 
   // Get parameters of initial pressure and cooling parameters
   if (NON_BAROTROPIC_EOS) {
@@ -305,13 +306,14 @@ void DiskCartInnerX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	Cx = -x2/radp;
 	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
-        prim(IDN,k,jl-j,i) = den;
         vel = VelProfileCyl(radp,phip,z);
-	prim(IVX,k,jl-j,i) = vel*Cx;
-	prim(IVY,k,jl-j,i) = vel*Cy;
+	prim(IVX,k,jl-j,i) -= dt*(prim(IVX,k,jl-j,i)-vel*Cx)/tau_damp;
+	prim(IVY,k,jl-j,i) -= dt*(prim(IVY,k,jl-j,i)-vel*Cy)/tau_damp;
         prim(IVZ,k,jl-j,i) = 0.0;
-        if (NON_BAROTROPIC_EOS)
+        prim(IDN,k,jl-j,i) -= dt*(prim(IDN,k,jl-j,i) - den)/tau_damp;
+        if (NON_BAROTROPIC_EOS){
 	  prim(IEN,k,jl-j,i) = PoverR(radp, phip, z)*prim(IDN,k,jl-j,i);
+	}
       }
     }
   }
@@ -334,13 +336,14 @@ void DiskCartOuterX2(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	Cx = -x2/radp;
 	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
-        prim(IDN,k,ju+j,i) = den;
         vel = VelProfileCyl(radp,phip,z);
-	prim(IVX,k,ju+j,i) = vel*Cx;
-	prim(IVY,k,ju+j,i) = vel*Cy;
+	prim(IVX,k,ju+j,i) -= dt*(prim(IVX,k,ju+j,i)-vel*Cx)/tau_damp;
+	prim(IVY,k,ju+j,i) -= dt*(prim(IVY,k,ju+j,i)-vel*Cy)/tau_damp;
         prim(IVZ,k,ju+j,i) = 0.0;
-        if (NON_BAROTROPIC_EOS)
+        prim(IDN,k,ju+j,i) -= dt*(prim(IDN,k,ju+j,i) - den)/tau_damp;
+        if (NON_BAROTROPIC_EOS){
 	  prim(IEN,k,ju+j,i) = PoverR(radp, phip, z)*prim(IDN,k,ju+j,i);
+	}
       }
     }
   }
@@ -363,13 +366,14 @@ void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	Cx = -x2/radp;
 	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
-        prim(IDN,k,j,il-i) = den;
         vel = VelProfileCyl(radp,phip,z);
-	prim(IVX,k,j,il-i) = vel*Cx;
-	prim(IVY,k,j,il-i) = vel*Cy;
+	prim(IVX,k,j,il-i) -= dt*(prim(IVX,k,j,il-i)-vel*Cx)/tau_damp;
+	prim(IVY,k,j,il-i) -= dt*(prim(IVY,k,j,il-i)-vel*Cy)/tau_damp;
         prim(IVZ,k,j,il-i) = 0.0;
-        if (NON_BAROTROPIC_EOS)
+        prim(IDN,k,j,il-i) -= dt*(prim(IDN,k,j,il-i) - den)/tau_damp;
+        if (NON_BAROTROPIC_EOS){
 	  prim(IEN,k,j,il-i) = PoverR(radp, phip, z)*prim(IDN,k,j,il-i);
+	}
       }
     }
   }
@@ -392,13 +396,14 @@ void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 	Cx = -x2/radp;
 	Cy = (r0+x1)/radp;
         den = DenProfileCyl(radp,phip,z);
-        prim(IDN,k,j,iu+i) = den;
         vel = VelProfileCyl(radp,phip,z);
-	prim(IVX,k,j,iu+i) = vel*Cx;
-	prim(IVY,k,j,iu+i) = vel*Cy;
+	prim(IVX,k,j,iu+i) -= dt*(prim(k,j,iu+i)-vel*Cx)/tau_damp;
+	prim(IVY,k,j,iu+i) -= dt*(prim(k,j,iu+i)-vel*Cy)/tau_damp;
         prim(IVZ,k,j,iu+i) = 0.0;
-        if (NON_BAROTROPIC_EOS)
+        prim(IDN,k,j,iu+i) -= dt*(prim(IDN,k,j,iu+i) - den)/tau_damp;
+        if (NON_BAROTROPIC_EOS){
 	  prim(IEN,k,j,iu+i) = PoverR(radp, phip, z)*prim(IDN,k,j,iu+i);
+	}
       }
     }
   }
