@@ -36,7 +36,7 @@
 #include "../parameter_input.hpp"
 
 
-void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
+void KeplerianWithRotationAndWaveDamping(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 		    AthenaArray<Real> &cons_scalar);
@@ -49,9 +49,8 @@ namespace {
   Real PoverR(const Real rad, const Real phi, const Real z);
   Real VelProfileCyl(const Real rad, const Real phi, const Real z);
   // problem parameters which are useful to make global to this file
-  Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, soft_length;
-  Real dfloor, denl, wg, wt, OmegaP;
-  
+  Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, soft_length, cpd_r0, cpd_den0;
+  Real dfloor, denl, wg, wt, OmegaP,x1min ,x1max ,x2min ,x2max ,WDL ,T_damp;
 } // namespace
 
 // User-defined boundary conditions for disk simulations
@@ -80,11 +79,11 @@ void DiskCartOuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,F
 // orbiter is at the center of the coordinate system.
 void Mesh::InitUserMeshData(ParameterInput *pin) {
 
-  EnrollUserExplicitSourceFunction(PrimaryGravity);
+  EnrollUserExplicitSourceFunction(KeplerianWithRotationAndWaveDamping);
 
   // Get parameters 
-  gm1 = pin->GetOrAddReal("problem","GM_s",0.0); 
-  r0 = pin->GetOrAddReal("problem","r0",1.0);
+  gm1 = pin->GetReal("problem","GM_s"); 
+  r0 = pin->GetReal("problem","r0");
   soft_length = pin->GetReal("problem","soft_length");
   denl = pin->GetReal("problem","den_gap");
   wg = pin->GetReal("problem","wg");
@@ -92,6 +91,16 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   rho0 = pin->GetReal("problem","rho0");
   //dslope = pin->GetOrAddReal("problem","dslope",0.0);
   OmegaP = pin->GetReal("problem","Omega_P");
+  cpd_r0 = pin->GetReal("problem", "cpd_r0");
+  cpd_den0 = pin->GetReal("problem", "cpd_den0");
+
+  // for wave damping in the source function
+  x1min = pin->GetReal("mesh", "x1min");
+  x1max = pin->GetReal("mesh", "x1max");
+  x2min = pin->GetReal("mesh", "x2min");
+  x2max = pin->GetReal("mesh", "x2max");
+  WDL = pin->GetReal("mesh", "WaveDampingLength");
+  T_damp = pin->GetReal("mesh", "T_damp");
 
   // Get parameters of initial pressure and cooling parameters
   if (NON_BAROTROPIC_EOS) {
@@ -131,7 +140,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real den, vel;
   Real x1, x2, x3;
   Real Cx, Cy;
-  Real radp, phip;
+  Real radp, phip, r;
 
   //OrbitalVelocityFunc &vK = porb->OrbitalVelocity;
   //  Initialize density and momenta
@@ -156,6 +165,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 	phydro->u(IM1,k,j,i) = den*vel*Cx;
 	phydro->u(IM2,k,j,i) = den*vel*Cy;
         phydro->u(IM3,k,j,i) = 0.0;
+
+	r = std::sqrt(x1*x1+x2*x2+x3*x3);
+	phydro->u(IDN,k,j,i) += cpd_den0*std::exp(-r/cpd_r0);
+	
         if (NON_BAROTROPIC_EOS) {
           Real p_over_r = PoverR(radp,phip,z);
           phydro->u(IEN,k,j,i) = p_over_r*phydro->u(IDN,k,j,i)/(gamma_gas - 1.0);
@@ -248,12 +261,12 @@ Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
 }
 } // namespace
 
-void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
+void KeplerianWithRotationAndWaveDamping(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 		    AthenaArray<Real> &cons_scalar){
   Real l, x1, x2, x3, Fx, Fy, den;
-  Real vx, vy, r, rs;
+  Real vx, vy, r, rs, phip, vk;
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
     x3 = pmb->pcoord->x3v(k);
     for (int j = pmb->js; j <= pmb->je; ++j) {
@@ -263,22 +276,33 @@ void PrimaryGravity(MeshBlock *pmb, const Real time, const Real dt,
 	den = prim(IDN,k,j,i);
 	vx = prim(IVX,k,j,i);
 	vy = prim(IVY,k,j,i);
-	// implement source term here
-	// GM* = 1
-	// R = 1
-	// Omega =1
+
+	// primary gravity
 	l = sqrt(x2*x2+(r0+x1)*(r0+x1));
 	Fx = ((r0+x1)/l)*(1/l/l-OmegaP*OmegaP*l)-2*OmegaP*vy;
 	Fy = (x2/l)*(1/l/l-OmegaP*OmegaP*l)+2*OmegaP*vx;
 	cons(IM1,k,j,i) -= dt*den*Fx;
 	cons(IM2,k,j,i) -= dt*den*Fy;
 
+	// orbiter gravity
 	r = sqrt(x1*x1+x2*x2);
 	rs = sqrt(x1*x1+x2*x2+soft_length*soft_length);
 	Fx = (-gm1*x1/rs)/rs/rs;
         Fy = (-gm1*x2/rs)/rs/rs;
 	cons(IM1,k,j,i) += dt*den*Fx;
 	cons(IM2,k,j,i) += dt*den*Fy;
+
+	// wave damping
+	if ((x1 < x1min+WDL) or (x1>x1max-WDL) or (x2<x2min+WDL) or (x2>x2max-WDL)){
+	  phip = std::atan2(x2, r0+x1);
+	  Fx = -x2/l;
+	  Fy = (r0+x1)/l;
+	  den = DenProfileCyl(l,phip,x3);
+	  vk = VelProfileCyl(l,phip,x3);
+	  cons(IM1,k,j,i) += -dt*(cons(IM1,k,j,i)-Fx*den*vk)/T_damp;
+	  cons(IM2,k,j,i) += -dt*(cons(IM2,k,j,i)-Fy*den*vk)/T_damp;
+	}
+
       }
     }
   }
