@@ -35,6 +35,7 @@
 #include "../orbital_advection/orbital_advection.hpp"
 #include "../parameter_input.hpp"
 
+Real GravForceCalc(MeshBlock *pmb, int iout);
 
 void KeplerianWithRotationAndWaveDamping(MeshBlock *pmb, const Real time, const Real dt,
               const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
@@ -80,6 +81,9 @@ void DiskCartOuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,F
 void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   EnrollUserExplicitSourceFunction(KeplerianWithRotationAndWaveDamping);
+  AllocateUserHistoryOutput(2);
+  EnrollUserHistoryOutput(0, GravForceCalc, "Fgrav_x");
+  EnrollUserHistoryOutput(1, GravForceCalc, "Fgrav_y");
 
   // Get parameters 
   gm1 = pin->GetReal("problem","GM_s"); 
@@ -266,7 +270,7 @@ void KeplerianWithRotationAndWaveDamping(MeshBlock *pmb, const Real time, const 
               const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 		    AthenaArray<Real> &cons_scalar){
   Real l, x1, x2, x3, Fx, Fy, den;
-  Real vx, vy, r, rs, phip, vk;
+  Real vx, vy, rs, phip, vk;
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
     x3 = pmb->pcoord->x3v(k);
     for (int j = pmb->js; j <= pmb->je; ++j) {
@@ -285,7 +289,6 @@ void KeplerianWithRotationAndWaveDamping(MeshBlock *pmb, const Real time, const 
 	cons(IM2,k,j,i) -= dt*den*Fy;
 
 	// orbiter gravity
-	r = sqrt(x1*x1+x2*x2);
 	rs = sqrt(x1*x1+x2*x2+soft_length*soft_length);
 	Fx = (-gm1*x1/rs)/rs/rs;
         Fy = (-gm1*x2/rs)/rs/rs;
@@ -307,6 +310,33 @@ void KeplerianWithRotationAndWaveDamping(MeshBlock *pmb, const Real time, const 
     }
   }
   return;
+}
+
+Real GravForceCalc(MeshBlock *pmb, int iout) {
+  Real tauX=0, tauY=0, den, x1, x2, x3, rs, vol, dF;
+  int is=pmb->is, ie=pmb->ie, js=pmb->js, je=pmb->je, ks=pmb->ks, ke=pmb->ke;
+  for(int k=ks; k<=ke; k++) {
+    x3 = pmb->pcoord->x3v(k);
+    for(int j=js; j<=je; j++) {
+      x2 = pmb->pcoord->x2v(j);
+      for(int i=is; i<=ie; i++) {
+	x1 = pmb->pcoord->x1v(i);
+	den = pmb->phydro->u(IDN, k, j, i);
+        vol = pmb->pcoord->GetCellVolume(k,j,i);
+	rs = sqrt(x1*x1+x2*x2+soft_length*soft_length);
+	dF = gm1*x1/rs/rs/rs*den*vol;
+	tauX += (x1/rs)*dF;
+	tauY += (x2/rs)*dF;
+      }
+    }
+  }
+  if (iout==0) {
+    return tauX;
+  } else if (iout == 1) {
+    return tauY;
+  } else {
+    return 0.;
+  }
 }
 
 //----------------------------------------------------------------------------------------

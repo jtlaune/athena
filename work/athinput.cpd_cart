@@ -9,31 +9,31 @@ problem_id  = cpd_cart 	# problem ID: basename of output filenames
 <output1>
 file_type   = hdf5 	# VTK data dump
 variable    = cons      #
-dt          = 0.5    # time increment between outputs
+dt          = 1.0    # time increment between outputs
 
 <output2>
 file_type   = hst       # History data dump
-dt          = 0.5   # time increment between outputs
+dt          = 0.05   # time increment between outputs
 
 <time>
 cfl_number  = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
 nlim        = -1        # cycle limit
-tlim        = 10.     # time limit
+tlim        = 62.8     # time limit
 integrator  = vl2       # time integration algorithm
 xorder      = 2         # order of spatial reconstruction
 ncycle_out  = 1         # interval for stdout summary info
 
 <mesh>
 nx1         = 256             # Number of zones in X1-direction
-x1min       = -0.5            # minimum value of X1
-x1max       = 0.5            # maximum value of X2
+x1min       = -0.75            # minimum value of X1
+x1max       = 0.75            # maximum value of X2
 ix1_bc      = user	      # Inner-X1 boundary condition flag
 ox1_bc      = user          # Outer-X1 boundary condition flag
 x1rat       = 1.0         # non-uniform grid ratio
 
 nx2         = 256            # Number of zones in X2-direction
-x2min       = -0.5             # minimum value of X2
-x2max       = 0.5  	       # maximum value of X2
+x2min       = -0.75             # minimum value of X2
+x2max       = 0.75  	       # maximum value of X2
 ix2_bc      = user       # Inner-X2 boundary condition flag
 ox2_bc      = user 	    # Outer-X2 boundary condition flag
 
