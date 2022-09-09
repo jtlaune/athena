@@ -50,8 +50,8 @@ namespace {
   Real PoverR(const Real rad, const Real phi, const Real z);
   Real VelProfileCyl(const Real rad, const Real phi, const Real z);
   // problem parameters which are useful to make global to this file
-  Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, soft_length, cpd_r0, cpd_den0;
-  Real dfloor, denl, wg, wt, OmegaP,x1min ,x1max ,x2min ,x2max ,WDL ,T_damp;
+  Real gm1, r0, rho0, dslope, p0_over_r0, pslope, gamma_gas, soft_length;
+  Real dfloor, denl, wg, wt, OmegaP,x1min ,x1max ,x2min ,x2max ,WDL ,T_damp_prim, T_damp_bdy, innerbdy;
 } // namespace
 
 // User-defined boundary conditions for disk simulations
@@ -95,8 +95,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   rho0 = pin->GetReal("problem","rho0");
   //dslope = pin->GetOrAddReal("problem","dslope",0.0);
   OmegaP = pin->GetReal("problem","Omega_P");
-  cpd_r0 = pin->GetReal("problem", "cpd_r0");
-  cpd_den0 = pin->GetReal("problem", "cpd_den0");
+  innerbdy = pin->GetReal("problem", "innerbdy");
+  dslope = pin->GetReal("problem", "dslope");
 
   // for wave damping in the source function
   x1min = pin->GetReal("mesh", "x1min");
@@ -104,7 +104,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   x2min = pin->GetReal("mesh", "x2min");
   x2max = pin->GetReal("mesh", "x2max");
   WDL = pin->GetReal("mesh", "WaveDampingLength");
-  T_damp = pin->GetReal("mesh", "T_damp");
+  T_damp_bdy = pin->GetReal("mesh", "T_damp_bdy");
+  T_damp_prim = pin->GetReal("mesh", "T_damp_prim");
 
   // Get parameters of initial pressure and cooling parameters
   if (NON_BAROTROPIC_EOS) {
@@ -159,8 +160,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 	phip = std::atan2(x2, r0+x1);
         // compute initial conditions in cylindrical coordinates
 	// relative to primary
-        den = DenProfileCyl(radp,phip,z);
-        vel = VelProfileCyl(radp,phip,z);
+        den = DenProfileCyl(radp,phip,x3);
+        vel = VelProfileCyl(radp,phip,x3);
         //if (porb->orbital_advection_defined)
         //  vel -= vK(porb, x1, x2, x3);
         phydro->u(IDN,k,j,i) = den;
@@ -171,7 +172,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         phydro->u(IM3,k,j,i) = 0.0;
 
 	r = std::sqrt(x1*x1+x2*x2+x3*x3);
-	phydro->u(IDN,k,j,i) += cpd_den0*std::exp(-r/cpd_r0);
 	
         if (NON_BAROTROPIC_EOS) {
           Real p_over_r = PoverR(radp,phip,z);
@@ -212,16 +212,21 @@ void GetCylCoord(Coordinates *pco,Real &rad,Real &phi,Real &z,int i,int j,int k)
 Real DenProfileCyl(const Real rad, const Real phi, const Real z) {
   //Real den;
   Real denmid;
-  //Real denmid = rho0*std::pow(rad/r0,dslope);
-  Real DRdp = std::abs(rad-r0);
+  if (rad > innerbdy) {
+    denmid = rho0*std::pow(rad/r0,dslope);
+  } else {
+    denmid = rho0*std::pow(innerbdy/r0,dslope);
+  }
+  //Real DRdp = std::abs(rad-r0);
   //Real p_over_r = p0_over_r0;
   //if (NON_BAROTROPIC_EOS) p_over_r = PoverR(rad, phi, z);
-  if (DRdp >= wg) {
-    denmid = denl + (rho0-denl)/2*(2-exp((wg-DRdp)/wt));
-  }
-  else {
-    denmid = denl + (rho0-denl)/2*exp((DRdp-wg)/wt);
-  }
+
+  //if (DRdp >= wg) {
+  //  denmid = denl + (rho0-denl)/2*(2-exp((wg-DRdp)/wt));
+  //}
+  //else {
+  //  denmid = denl + (rho0-denl)/2*exp((DRdp-wg)/wt);
+  //}
   //Real dentem = denmid;
   //Real dentem = denmid;
   //den = dentem;
@@ -248,12 +253,17 @@ Real PoverR(const Real rad, const Real phi, const Real z) {
   }
 
   Real dDendr(const Real rad) {
-    Real DRdp = std::abs(rad-r0);
-    if (DRdp >= wg) {
-      return 0.5*(rho0-denl)/wt*exp((-DRdp+wg)/wt)*dDRdpdr(rad);
+    if (rad > innerbdy) {
+      return(dslope*rho0*std::pow(rad/r0, dslope-1));
     } else {
-      return 0.5*(rho0-denl)/wt*exp((DRdp-wg)/wt)*dDRdpdr(rad);
+      return(0.);
     }
+    //Real DRdp = std::abs(rad-r0);
+    //if (DRdp >= wg) {
+    //  return 0.5*(rho0-denl)/wt*exp((-DRdp+wg)/wt)*dDRdpdr(rad);
+    //} else {
+    //  return 0.5*(rho0-denl)/wt*exp((DRdp-wg)/wt)*dDRdpdr(rad);
+    //}
   }
 
 Real VelProfileCyl(const Real rad, const Real phi, const Real z) {
@@ -294,18 +304,6 @@ void KeplerianWithRotationAndWaveDamping(MeshBlock *pmb, const Real time, const 
         Fy = (-gm1*x2/rs)/rs/rs;
 	cons(IM1,k,j,i) += dt*den*Fx;
 	cons(IM2,k,j,i) += dt*den*Fy;
-
-	// wave damping
-	if ((x1 < x1min+WDL) or (x1>x1max-WDL) or (x2<x2min+WDL) or (x2>x2max-WDL)){
-	  phip = std::atan2(x2, r0+x1);
-	  Fx = -x2/l;
-	  Fy = (r0+x1)/l;
-	  den = DenProfileCyl(l,phip,x3);
-	  vk = VelProfileCyl(l,phip,x3);
-	  cons(IM1,k,j,i) += -dt*(cons(IM1,k,j,i)-Fx*den*vk)/T_damp;
-	  cons(IM2,k,j,i) += -dt*(cons(IM2,k,j,i)-Fy*den*vk)/T_damp;
-	}
-
       }
     }
   }
@@ -337,6 +335,41 @@ Real GravForceCalc(MeshBlock *pmb, int iout) {
   } else {
     return 0.;
   }
+}
+
+void MeshBlock::UserWorkInLoop() {
+  Real l, x1, x2, x3, den, radp, phip, Cx, Cy, vk, dt;
+  for (int k=ks; k<=ke; k++) {
+    x3 = pcoord->x3v(k);
+    for (int j=js; j<=je; j++) {
+      x2 = pcoord->x2v(j);
+      for (int i=is; i<=ie; i++) {
+	x1 = pcoord->x1v(i);
+
+	dt = pmy_mesh->dt;
+	l = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	radp = sqrt(x2*x2+(r0+x1)*(r0+x1));
+	phip = std::atan2(x2, r0+x1);
+        den = DenProfileCyl(radp,phip,x3);
+	Cx = -x2/l;
+	Cy = (r0+x1)/l;
+	den = DenProfileCyl(l,phip,x3);
+	vk = VelProfileCyl(l,phip,x3);
+
+	// wave damping at the inner primary
+	if (l < innerbdy) {
+	  phydro->u(IM1,k,j,i) += -dt*(phydro->u(IM1,k,j,i)-Cx*den*vk)/T_damp_prim;
+	  phydro->u(IM2,k,j,i) += -dt*(phydro->u(IM2,k,j,i)-Cy*den*vk)/T_damp_prim;
+	}
+	// wave damping at the edges
+	if ((x1 < x1min+WDL) or (x1>x1max-WDL) or (x2<x2min+WDL) or (x2>x2max-WDL)){
+	  phydro->u(IM1,k,j,i) += -dt*(phydro->u(IM1,k,j,i)-Cx*den*vk)/T_damp_bdy;
+	  phydro->u(IM2,k,j,i) += -dt*(phydro->u(IM2,k,j,i)-Cy*den*vk)/T_damp_bdy;
+	}
+      }
+    }
+  }
+  return;
 }
 
 //----------------------------------------------------------------------------------------
