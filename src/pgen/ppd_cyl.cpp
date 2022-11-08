@@ -32,8 +32,8 @@
 
 
 namespace {
-  Real gm1, Sig0, dslope, dfloor, pfloor, prim_soft;
-  Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, R0, CS02;
+  Real gm1, Sig0, dslope, dfloor, R0, CS02;
+  Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min;
 }
 
 Real DenProf(const Real rad);
@@ -56,18 +56,17 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
 
   dfloor = pin->GetReal("hydro", "Sigma_floor");
-  pfloor = pin->GetReal("hydro", "P_floor");
 
   gm1 = pin->GetReal("problem", "GM_s");
-  R0 = pin->GetReal("problem", "R0");
   Sig0 = pin->GetReal("problem", "Sigma_0");
   dslope = pin->GetReal("problem", "delta");
-  prim_soft = pin->GetReal("problem", "prim_soft");
+  R0 = pin->GetReal("problem", "R0");
+  CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
+
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
   WDL2 = pin->GetReal("problem", "WaveDampingLength_out");
   innerbdy = pin->GetReal("problem", "innerbdy");
   x1min = pin->GetReal("mesh", "x1min");
-  CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   T_damp_in = pin->GetReal("problem", "T_damp_in");
 
@@ -142,14 +141,13 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 	x1 = pmb->pcoord->x1v(i);
 
 	rstar = x1;
-	rstar_soft = std::sqrt(x1*x1+prim_soft*prim_soft);
 	vk = VelProf(rstar);
 
-	Sig0 = DenProf(rstar_soft);
+	Sig0 = DenProf(rstar);
 	Sig = prim(IDN,k,j,i);
 
-	// force calculation + excised region
-	Fpr = -gm1*rstar/rstar_soft/rstar_soft/rstar_soft;
+	// force calculation
+	Fpr = -gm1/rstar/rstar;
         cons(IM1, k, j, i) += dt * Sig * Fpr;
         cons(IM2, k, j, i) += 0;
 
