@@ -32,7 +32,7 @@
 
 
 namespace {
-  Real gm1, Sig0, dslope, dfloor, R0, CS02;
+  Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min;
 }
 
@@ -61,6 +61,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   Sig0 = pin->GetReal("problem", "Sigma_0");
   dslope = pin->GetReal("problem", "delta");
   R0 = pin->GetReal("problem", "R0");
+  Omega0 = pin->GetReal("problem", "Omega0");
+  soft_sat = pin->GetReal("problem", "soft_sat");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
 
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
@@ -81,17 +83,19 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 }
 
 Real DenProf(const Real rad) {
+  // Density profile Sigma(r)
   return(std::max(Sig0*std::pow(rad/R0, dslope), dfloor));
 }
 
 Real VelProf(const Real rad) {
-  return std::sqrt(dslope*CS02 + 1/rad);
+  // Velocity profile v(r)
+  return std::sqrt(dslope*CS02 + 1/rad) - Omega0*rad;
 }
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real x1, x2, x3;
   Real Sig, vk, Cx, Cy;
-  Real rstar, rstar_soft;
+  Real rprim;
   for (int k=ks; k<=ke; ++k) {
     x3 = pcoord->x3v(k);
     for (int j=js; j<=je; ++j) {
@@ -99,9 +103,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
       for (int i=is; i<=ie; ++i) {
 	x1 = pcoord->x1v(i);
 
-	rstar = x1;
-	Sig = DenProf(rstar);
-	vk = VelProf(rstar);
+	rprim = x1;
+	Sig = DenProf(rprim);
+	vk = VelProf(rprim);
 
 	phydro->u(IDN,k,j,i) = Sig;
 	phydro->u(IM1,k,j,i) = 0.;
@@ -114,6 +118,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 }
 
 Real splineKernel(Real x) {
+  // smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0
   Real W;
   if (x<0) {
     W = 1.;
@@ -131,8 +136,9 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 			const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
 			const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 			AthenaArray<Real> &cons_scalar) {
-  Real vk, Sig, Sig0, rstar, rstar_soft, x1, x2, x3;
-  Real Fpr;
+  Real vk, vr, vth, Sig, Sig0, rprim, rsecn;
+  Real x1, x2, x3;
+  Real Fpr, Cs;
   for (int k=pmb->ks; k<=pmb->ke; ++k) {
     x3 = pmb->pcoord->x3v(k);
     for (int j=pmb->js; j<=pmb->je; ++j) {
@@ -140,27 +146,41 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
       for (int i=pmb->is; i<=pmb->ie; ++i) {
 	x1 = pmb->pcoord->x1v(i);
 
-	rstar = x1;
-	vk = VelProf(rstar);
-
-	Sig0 = DenProf(rstar);
+	rprim = x1;
+	rsecn = std::sqrt(rprim*rprim+R0*R0-2*R0*rprim*std::cos(x2));
+	vk = VelProf(rprim);
+	Sig0 = DenProf(rprim);
 	Sig = prim(IDN,k,j,i);
 
-	// force calculation
-	Fpr = -gm1/rstar/rstar;
+	// primary gravity
+	Fpr = -1./rprim/rprim;
         cons(IM1, k, j, i) += dt * Sig * Fpr;
         cons(IM2, k, j, i) += 0;
 
+	// centrifugal 
+	cons(IM1, k, j, i) += dt*Sig*Omega0*Omega0*rprim;
+
+	// coriolis
+	vr = prim(IM1, k, j, i);
+	vth = prim(IM2, k, j, i);
+	cons(IM1, k, j, i) += 2*dt*Sig*Omega0*vth;
+	cons(IM2, k, j, i) += -2*dt*Sig*Omega0*vr;
+
+	// satellite gravity
+	Cs = gm1/(rsecn*rsecn+soft_sat*soft_sat)/std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
+	cons(IM1, k, j, i) += Sig*dt*Cs*(std::cos(x2)*(R0-x1*std::cos(x2)) - x1*std::sin(x2)*std::sin(x2));
+	cons(IM2, k, j, i) += -Sig*dt*Cs*R0*std::sin(x2);
+
 	// wave damping regions
-        if (rstar <= innerbdy) {
-	  Real x = (rstar-x1min)/(innerbdy-x1min);
+        if (rprim <= innerbdy) {
+	  Real x = (rprim-x1min)/(innerbdy-x1min);
 	  Real factor = splineKernel(x);
 	  cons(IDN,k,j,i) += -factor*dt*(cons(IDN,k,j,i)-Sig0)/T_damp_in;
 	  cons(IM1,k,j,i) += -factor*dt*(cons(IM1,k,j,i))/T_damp_in;
 	  cons(IM2,k,j,i) += -factor*dt*(cons(IM2,k,j,i)-Sig0*vk)/T_damp_in;
 	}
-	if (rstar >= WDL1) {
-	  Real x = 1-(rstar-WDL1)/(WDL2-WDL1);
+	if (rprim >= WDL1) {
+	  Real x = 1-(rprim-WDL1)/(WDL2-WDL1);
 	  Real factor = splineKernel(x);
 	  cons(IDN,k,j,i) += -factor*dt*(cons(IDN,k,j,i)-Sig0)/T_damp_bdy;
 	  cons(IM1,k,j,i) += -factor*dt*(cons(IM1,k,j,i))/T_damp_bdy;
@@ -171,10 +191,14 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
   }
 }
 
+int RefinementCondition(MeshBlock *pmb) {
+  
+}
+
 void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
 		     Real time, Real dt,
 		     int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
-  Real Sig, vk, rstar, rstar_soft, x1, x2, x3, Cx, Cy;
+  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
   for (int k=kl; k<=ku; ++k) {
     x3 = pco->x3v(k);
     for (int j=jl; j<=ju; ++j) {
@@ -182,9 +206,9 @@ void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
       for (int i=1; i<=ngh; ++i) {
 	x1 = pco->x1v(il-i);
 
-	rstar = x1;
-	Sig = DenProf(rstar);
-	vk = VelProf(rstar);
+	rprim = x1;
+	Sig = DenProf(rprim);
+	vk = VelProf(rprim);
 
 	prim(IDN,k,j,il-i) = Sig;
 	prim(IM1,k,j,il-i) = 0.;
@@ -198,7 +222,7 @@ void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
 void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
 		     Real time, Real dt,
 		     int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
-  Real Sig, vk, rstar, rstar_soft, x1, x2, x3, Cx, Cy;
+  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
   for (int k=kl; k<=ku; ++k) {
     x3 = pco->x3v(k);
     for (int j=jl; j<=ju; ++j) {
@@ -206,9 +230,9 @@ void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
       for (int i=1; i<=ngh; ++i) {
 	x1 = pco->x1v(iu+i);
 
-	rstar = x1;
-	Sig = DenProf(rstar);
-	vk = VelProf(rstar);
+	rprim = x1;
+	Sig = DenProf(rprim);
+	vk = VelProf(rprim);
 
 	prim(IDN,k,j,iu+i) = Sig;
 	prim(IM1,k,j,iu+i) = 0.;
