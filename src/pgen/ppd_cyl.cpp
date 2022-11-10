@@ -33,11 +33,13 @@
 
 namespace {
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
-  Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min;
+  Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
 }
 
 Real DenProf(const Real rad);
 Real VelProf(const Real rad);
+int RefinementCondition(MeshBlock *pmb);
+
 // User source function
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 		  const AthenaArray<Real> &prim, const AthenaArray<Real> &prim_scalar,
@@ -54,6 +56,9 @@ Real splineKernel(Real x);
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
+  if (adaptive==true) {
+    EnrollUserRefinementCondition(RefinementCondition);
+  }
 
   dfloor = pin->GetReal("hydro", "Sigma_floor");
 
@@ -63,6 +68,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   R0 = pin->GetReal("problem", "R0");
   Omega0 = pin->GetReal("problem", "Omega0");
   soft_sat = pin->GetReal("problem", "soft_sat");
+  l_refine = pin->GetReal("problem", "l_refine");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
 
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
@@ -192,7 +198,19 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 }
 
 int RefinementCondition(MeshBlock *pmb) {
-  
+  Real x1min = pmb->pcoord->x1v(pmb->is);
+  Real x1max = pmb->pcoord->x1v(pmb->ie);
+  Real x2min = pmb->pcoord->x2v(pmb->js);
+  Real x2max = pmb->pcoord->x2v(pmb->je);
+  Real cond = 0;
+  if ((x1min < (R0+l_refine)) and (x1max > (R0-l_refine))) {
+    // radial band
+    if ((x2min < 2*PI*l_refine/R0) and (x2max > -2*PI*l_refine/R0)) { 
+      // azimuthal band
+      cond = 1;
+    }
+  }
+  return(cond);
 }
 
 void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
