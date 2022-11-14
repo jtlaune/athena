@@ -39,6 +39,7 @@ namespace {
 Real DenProf(const Real rad);
 Real VelProf(const Real rad);
 int RefinementCondition(MeshBlock *pmb);
+Real GravForceCalc(MeshBlock *pmb, int iout);
 
 // User source function
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
@@ -59,6 +60,9 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (adaptive==true) {
     EnrollUserRefinementCondition(RefinementCondition);
   }
+  AllocateUserHistoryOutput(2);
+  EnrollUserHistoryOutput(0, GravForceCalc, "Fs,grav_x=r");
+  EnrollUserHistoryOutput(1, GravForceCalc, "Fs,grav_y=th");
 
   dfloor = pin->GetReal("hydro", "Sigma_floor");
 
@@ -123,6 +127,40 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   }
 }
 
+Real GravForceCalc(MeshBlock *pmb, int iout) {
+  Real F_x=0, F_y=0, Sig, x1, x2, x3;
+  Real rs, vol, Fmag, rsecn, rsoft;
+  int is=pmb->is, ie=pmb->ie, js=pmb->js, je=pmb->je, ks=pmb->ks, ke=pmb->ke;
+  for(int k=ks; k<=ke; k++) {
+    x3 = pmb->pcoord->x3v(k);
+    for(int j=js; j<=je; j++) {
+      x2 = pmb->pcoord->x2v(j);
+      for(int i=is; i<=ie; i++) {
+	x1 = pmb->pcoord->x1v(i);
+
+	Sig = pmb->phydro->u(IDN, k, j, i);
+        vol = pmb->pcoord->GetCellVolume(k,j,i);
+
+	rsecn = std::sqrt(x1*x1+R0*R0-2*R0*x1*std::cos(x2));
+	rsoft = std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
+
+	// satellite gravity
+	Fmag = gm1/rsoft/std::sqrt(rsoft);
+	F_x += Sig*vol*Fmag*(std::cos(x2)*x1-R0);
+	F_y += -Sig*vol*Fmag*x1*std::sin(x2);
+
+      }
+    }
+  }
+  
+  if (iout==0) {
+    return F_x;
+  } else if (iout == 1) {
+    return F_y;
+  } else {
+    return 0.;
+  }
+}
 Real splineKernel(Real x) {
   // smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0
   Real W;
@@ -174,7 +212,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 
 	// satellite gravity
 	Cs = gm1/(rsecn*rsecn+soft_sat*soft_sat)/std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
-	cons(IM1, k, j, i) += Sig*dt*Cs*(std::cos(x2)*(R0-x1*std::cos(x2)) - x1*std::sin(x2)*std::sin(x2));
+	cons(IM1, k, j, i) += Sig*dt*Cs*(std::cos(x2)*R0-x1);
 	cons(IM2, k, j, i) += -Sig*dt*Cs*R0*std::sin(x2);
 
 	// wave damping regions
