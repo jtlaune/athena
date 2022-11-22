@@ -34,6 +34,7 @@
 namespace {
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
+  Real rH_exclude;
 }
 
 Real DenProf(const Real rad);
@@ -73,6 +74,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   Omega0 = pin->GetReal("problem", "Omega0");
   soft_sat = pin->GetReal("problem", "soft_sat");
   l_refine = pin->GetReal("problem", "l_refine");
+  rH_exclude = pin->GetReal("problem", "rH_exclude");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
 
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
@@ -142,12 +144,13 @@ Real GravForceCalc(MeshBlock *pmb, int iout) {
         vol = pmb->pcoord->GetCellVolume(k,j,i);
 
 	rsecn = std::sqrt(x1*x1+R0*R0-2*R0*x1*std::cos(x2));
-	rsoft = std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
 
-	// satellite gravity
-	Fmag = gm1/rsoft/std::sqrt(rsoft);
-	F_x += Sig*vol*Fmag*(std::cos(x2)*x1-R0);
-	F_y += -Sig*vol*Fmag*x1*std::sin(x2);
+	if (rsecn > rH_exclude*std::pow(gm1/3., 1/3.)) {
+	  rsoft = std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
+	  Fmag = gm1/rsoft/rsoft/rsoft;
+	  F_x += Sig*vol*Fmag*(std::cos(x2)*x1-R0);
+	  F_y += -Sig*vol*Fmag*x1*std::sin(x2);
+	}
 
       }
     }
@@ -215,15 +218,19 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 	cons(IM1, k, j, i) += Sig*dt*Cs*(std::cos(x2)*R0-x1);
 	cons(IM2, k, j, i) += -Sig*dt*Cs*R0*std::sin(x2);
 
+	// indirect
+	//cons(IM1, k, j, i) += gm1*std::cos(x2)/(R0*R0+soft_sat*soft_sat);
+	//cons(IM2, k, j, i) += -gm1*std::sin(x2)/(R0*R0+soft_sat*soft_sat);
+
 	// wave damping regions
-        if (rprim <= innerbdy) {
+        if ((rprim <= innerbdy) and (innerbdy != x1min)) {
 	  Real x = (rprim-x1min)/(innerbdy-x1min);
 	  Real factor = splineKernel(x);
 	  cons(IDN,k,j,i) += -factor*dt*(cons(IDN,k,j,i)-Sig0)/T_damp_in;
 	  cons(IM1,k,j,i) += -factor*dt*(cons(IM1,k,j,i))/T_damp_in;
 	  cons(IM2,k,j,i) += -factor*dt*(cons(IM2,k,j,i)-Sig0*vk)/T_damp_in;
 	}
-	if (rprim >= WDL1) {
+	if ((rprim >= WDL1) and (WDL2 != WDL2)) {
 	  Real x = 1-(rprim-WDL1)/(WDL2-WDL1);
 	  Real factor = splineKernel(x);
 	  cons(IDN,k,j,i) += -factor*dt*(cons(IDN,k,j,i)-Sig0)/T_damp_bdy;
