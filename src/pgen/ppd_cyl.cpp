@@ -48,10 +48,10 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 		  const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
 		  AthenaArray<Real> &cons_scalar);
 // User-defined boundary conditions for disk simulations
-void DiskCartInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
 	       Real time, Real dt,
 	       int il, int iu, int jl, int ju, int kl, int ku, int ngh);
-void DiskCartOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
+void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,FaceField &b,
 	       Real time, Real dt,
 	       int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 Real splineKernel(Real x);
@@ -90,10 +90,10 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
-    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskCartInnerX1);
+    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
   }
   if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user")) {
-    EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskCartOuterX1);
+    EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
   }
   return;
 }
@@ -377,7 +377,7 @@ int RefinementCondition(MeshBlock *pmb) {
   return(cond);
 }
 
-void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
+void DiskInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
 		     Real time, Real dt,
 		     int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
   Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
@@ -401,7 +401,7 @@ void DiskCartInnerX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, F
   }
 }
 
-void DiskCartOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
+void DiskOuterX1(MeshBlock *pmb,Coordinates *pco, AthenaArray<Real> &prim, FaceField &b,
 		     Real time, Real dt,
 		     int il, int iu, int jl, int ju, int kl, int ku, int ngh) {
   Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
