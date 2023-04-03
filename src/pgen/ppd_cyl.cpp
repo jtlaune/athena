@@ -34,7 +34,7 @@
 namespace {
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
-  Real rH_exclude;
+  Real rH_exclude, rSink, rEval;
 }
 
 Real DenProf(const Real rad);
@@ -55,6 +55,7 @@ void DiskCartOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,F
 	       Real time, Real dt,
 	       int il, int iu, int jl, int ju, int kl, int ku, int ngh);
 Real splineKernel(Real x);
+//void MeshBlock::UserWorkInLoop();
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
@@ -84,6 +85,9 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   T_damp_in = pin->GetReal("problem", "T_damp_in");
 
+  rSink = pin->GetReal("problem", "sink_radius");
+  rEval = pin->GetReal("problem", "eval_radius");
+
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
     EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskCartInnerX1);
@@ -91,6 +95,120 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user")) {
     EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskCartOuterX1);
   }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+// Function responsible for storing history quantities for output
+// Inputs: (none)
+// Outputs: (none)
+// Notes:
+//   Writes to ruser_meshblock_data[4] array the following quantities:
+//     n,0: mdot (mass flux across specified radius)
+//     n,1: edot (energy flux across specified radius)
+//     n,2: jdot (angular momentum flux across specified radius)
+//     n,3: phi (magnetic flux through specified radius)
+
+void MeshBlock::UserWorkInLoop() {
+  Real r, x1, x2, x3;
+  
+  for (int k=ks; k<=ke; ++k) {
+    x3 = pcoord->x3v(k);
+    for (int j=js; j<=je; ++j) {
+      x2 = pcoord->x2v(j);
+      for (int i=is; i<=ie; ++i) {
+        x1 = pcoord->x1v(i);
+        r = std::sqrt(x1*x1+x2*x2+x3*x3);
+        if (r < rSink) {
+          phydro->w(IVX,k,j,i) = 0;
+          phydro->w(IVY,k,j,i) = 0;
+          phydro->w(IVZ,k,j,i) = 0;
+          phydro->w(IDN,k,j,i) = dfloor;
+        } 
+      }
+    }
+  }
+
+  // This exmaple comes from pgen/gr_torus.cpp
+  // Prepare scratch arrays
+  /*
+  AthenaArray<Real> &g = ruser_meshblock_data[0];
+  AthenaArray<Real> &gi = ruser_meshblock_data[1];
+
+  if (num_flux_radii > 0) {
+    // Clear storage for history output accumulation
+    for (int n = 0; n < num_flux_radii; ++n) {
+      for (int m = 0; m < 4; ++m) {
+        ruser_meshblock_data[4](n,m) = 0.0;
+      }
+    }
+    // Go through all cells
+    for (int k = ks; k <= ke; ++k) {
+      for (int j = js; j <= je; ++j) {
+        pcoord->CellMetric(k, j, is, ie, g, gi);
+        for (int i = is; i <= ie; ++i) {
+          // Calculate normal-frame Lorentz factor
+          Real uu1 = phydro->w(IVX,k,j,i);
+          Real uu2 = phydro->w(IVY,k,j,i);
+          Real uu3 = phydro->w(IVZ,k,j,i);
+          Real tmp = g(I11,i) * SQR(uu1) + 2.0 * g(I12,i) * uu1 * uu2
+              + 2.0 * g(I13,i) * uu1 * uu3 + g(I22,i) * SQR(uu2)
+              + 2.0 * g(I23,i) * uu2 * uu3 + g(I33,i) * SQR(uu3);
+          Real gamma = std::sqrt(1.0 + tmp);
+
+          // Calculate 4-velocity
+          Real alpha = std::sqrt(-1.0 / gi(I00,i));
+          Real u0 = gamma / alpha;
+          Real u1 = uu1 - alpha * gamma * gi(I01,i);
+          Real u2 = uu2 - alpha * gamma * gi(I02,i);
+          Real u3 = uu3 - alpha * gamma * gi(I03,i);
+          Real u_0, u_1, u_2, u_3;
+          pcoord->LowerVectorCell(u0, u1, u2, u3, k, j, i, &u_0, &u_1, &u_2, &u_3);
+
+          // Calculate 4-magnetic field
+          Real bb1 = 0.0, bb2 = 0.0, bb3 = 0.0;
+          Real b0 = 0.0, b1 = 0.0, b2 = 0.0, b3 = 0.0;
+          Real b_0 = 0.0, b_1 = 0.0, b_2 = 0.0, b_3 = 0.0;
+          if (MAGNETIC_FIELDS_ENABLED) {
+            bb1 = pfield->bcc(IB1,k,j,i);
+            bb2 = pfield->bcc(IB2,k,j,i);
+            bb3 = pfield->bcc(IB3,k,j,i);
+            b0 = u_1 * bb1 + u_2 * bb2 + u_3 * bb3;
+            b1 = (bb1 + b0 * u1) / u0;
+            b2 = (bb2 + b0 * u2) / u0;
+            b3 = (bb3 + b0 * u3) / u0;
+            pcoord->LowerVectorCell(b0, b1, b2, b3, k, j, i, &b_0, &b_1, &b_2, &b_3);
+          }
+
+          // Calculate magnetic pressure
+          Real b_sq = b0 * b_0 + b1 * b_1 + b2 * b_2 + b3 * b_3;
+
+          // Check for contribution to history output
+          for (int n = 0; n < num_flux_radii; ++n) {
+            if (iuser_meshblock_data[0](n) == i || iuser_meshblock_data[0](n) + 1 == i) {
+              Real factor = ruser_meshblock_data[2](n);
+              if (iuser_meshblock_data[0](n) == i) {
+                factor = 1.0 - ruser_meshblock_data[2](n);
+              }
+              Real rho = phydro->w(IDN,k,j,i);
+              Real pgas = phydro->w(IPR,k,j,i);
+              Real t1_0 = (rho + gamma_adi / (gamma_adi - 1.0) * pgas + b_sq) * u1 * u_0
+                  - b1 * b_0;
+              Real t1_3 = (rho + gamma_adi / (gamma_adi - 1.0) * pgas + b_sq) * u1 * u_3
+                  - b1 * b_3;
+              Real area = ruser_meshblock_data[3](n,j);
+              ruser_meshblock_data[4](n,0) -= factor * rho * u1 * area;
+              ruser_meshblock_data[4](n,1) += factor * t1_0 * area;
+              ruser_meshblock_data[4](n,2) += factor * t1_3 * area;
+              ruser_meshblock_data[4](n,3) +=
+                  factor * 0.5 * std::sqrt(4.0*PI) * std::abs(bb1) * area;
+            }
+          }
+        }
+      }
+    }
+  }*/
+
   return;
 }
 
@@ -148,6 +266,7 @@ Real GravForceCalc(MeshBlock *pmb, int iout) {
 	if (rsecn > rH_exclude*std::pow(gm1/3., 1/3.)) {
 	  rsoft = std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
 	  Fmag = gm1/rsoft/rsoft/rsoft;
+	  //Fmag = gm1/rsecn/rsecn/rsecn;
 	  F_x += Sig*vol*Fmag*(std::cos(x2)*x1-R0);
 	  F_y += -Sig*vol*Fmag*x1*std::sin(x2);
 	}
@@ -230,7 +349,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 	  cons(IM1,k,j,i) += -factor*dt*(cons(IM1,k,j,i))/T_damp_in;
 	  cons(IM2,k,j,i) += -factor*dt*(cons(IM2,k,j,i)-Sig0*vk)/T_damp_in;
 	}
-	if ((rprim >= WDL1) and (WDL2 != WDL2)) {
+	if ((rprim >= WDL1) and (WDL2 != WDL1)) {
 	  Real x = 1-(rprim-WDL1)/(WDL2-WDL1);
 	  Real factor = splineKernel(x);
 	  cons(IDN,k,j,i) += -factor*dt*(cons(IDN,k,j,i)-Sig0)/T_damp_bdy;
