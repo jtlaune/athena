@@ -40,7 +40,7 @@ namespace {
 Real DenProf(const Real rad);
 Real VelProf(const Real rad);
 int RefinementCondition(MeshBlock *pmb);
-Real GravForceCalc(MeshBlock *pmb, int iout);
+Real Measurements(MeshBlock *pmb, int iout);
 
 // User source function
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
@@ -62,9 +62,10 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (adaptive==true) {
     EnrollUserRefinementCondition(RefinementCondition);
   }
-  AllocateUserHistoryOutput(2);
-  EnrollUserHistoryOutput(0, GravForceCalc, "Fs,grav_x=r");
-  EnrollUserHistoryOutput(1, GravForceCalc, "Fs,grav_y=th");
+  AllocateUserHistoryOutput(3);
+  EnrollUserHistoryOutput(0, Measurements, "Fs,grav_x=r");
+  EnrollUserHistoryOutput(1, Measurements, "Fs,grav_y=th");
+  EnrollUserHistoryOutput(2, Measurements, "AccretionEval");
 
   dfloor = pin->GetReal("hydro", "Sigma_floor");
 
@@ -87,6 +88,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   rSink = pin->GetReal("problem", "sink_radius");
   rEval = pin->GetReal("problem", "eval_radius");
+  nPtEval = pin->GetReal("problem", "N_eval_pts");
 
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
@@ -110,7 +112,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 //     n,3: phi (magnetic flux through specified radius)
 
 void MeshBlock::UserWorkInLoop() {
-  Real r, x1, x2, x3;
+  Real rsecn, x1, x2, x3;
   
   for (int k=ks; k<=ke; ++k) {
     x3 = pcoord->x3v(k);
@@ -118,8 +120,8 @@ void MeshBlock::UserWorkInLoop() {
       x2 = pcoord->x2v(j);
       for (int i=is; i<=ie; ++i) {
         x1 = pcoord->x1v(i);
-        r = std::sqrt(x1*x1+x2*x2+x3*x3);
-        if (r < rSink) {
+	      rsecn = std::sqrt(x1*x1+R0*R0-2*R0*x1*std::cos(x2));
+        if (rsecn < rSink) {
           phydro->w(IVX,k,j,i) = 0;
           phydro->w(IVY,k,j,i) = 0;
           phydro->w(IVZ,k,j,i) = 0;
@@ -231,54 +233,80 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
     for (int j=js; j<=je; ++j) {
       x2 = pcoord->x2v(j);
       for (int i=is; i<=ie; ++i) {
-	x1 = pcoord->x1v(i);
+	      x1 = pcoord->x1v(i);
 
-	rprim = x1;
-	Sig = DenProf(rprim);
-	vk = VelProf(rprim);
+	      rprim = x1;
+	      Sig = DenProf(rprim);
+	      vk = VelProf(rprim);
 
-	phydro->u(IDN,k,j,i) = Sig;
-	phydro->u(IM1,k,j,i) = 0.;
-	phydro->u(IM2,k,j,i) = Sig*vk;
-	phydro->u(IM3,k,j,i) = 0.;
+	      phydro->u(IDN,k,j,i) = Sig;
+	      phydro->u(IM1,k,j,i) = 0.;
+	      phydro->u(IM2,k,j,i) = Sig*vk;
+	      phydro->u(IM3,k,j,i) = 0.;
 
       }
     }
   }
 }
 
-Real GravForceCalc(MeshBlock *pmb, int iout) {
+Real Measurements(MeshBlock *pmb, int iout) {
   Real F_x=0, F_y=0, Sig, x1, x2, x3;
-  Real rs, vol, Fmag, rsecn, rsoft;
+  Real rs, vol, Fmag, rsecn, rsoft, angEval, x1Eval, x2Eval;
   int is=pmb->is, ie=pmb->ie, js=pmb->js, je=pmb->je, ks=pmb->ks, ke=pmb->ke;
+  Real drEval, momX1dir, momX2dir;
+  Real AccRate = 0;
+
+  Real evalVals[nPtEval] = { 0 };
+  Real drvalEvals[nPtEval] = { 1 };
+  
   for(int k=ks; k<=ke; k++) {
     x3 = pmb->pcoord->x3v(k);
     for(int j=js; j<=je; j++) {
       x2 = pmb->pcoord->x2v(j);
       for(int i=is; i<=ie; i++) {
-	x1 = pmb->pcoord->x1v(i);
+	      x1 = pmb->pcoord->x1v(i);
 
-	Sig = pmb->phydro->u(IDN, k, j, i);
+	      Sig = pmb->phydro->u(IDN, k, j, i);
         vol = pmb->pcoord->GetCellVolume(k,j,i);
 
-	rsecn = std::sqrt(x1*x1+R0*R0-2*R0*x1*std::cos(x2));
+	      rsecn = std::sqrt(x1*x1+R0*R0-2*R0*x1*std::cos(x2));
 
-	if (rsecn > rH_exclude*std::pow(gm1/3., 1/3.)) {
-	  rsoft = std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
-	  Fmag = gm1/rsoft/rsoft/rsoft;
-	  //Fmag = gm1/rsecn/rsecn/rsecn;
-	  F_x += Sig*vol*Fmag*(std::cos(x2)*x1-R0);
-	  F_y += -Sig*vol*Fmag*x1*std::sin(x2);
-	}
-
+	      if (rsecn > rH_exclude*std::pow(gm1/3., 1/3.)) {
+	        rsoft = std::sqrt(rsecn*rsecn+soft_sat*soft_sat);
+	        Fmag = gm1/rsoft/rsoft/rsoft;
+	        //Fmag = gm1/rsecn/rsecn/rsecn;
+	        F_x += Sig*vol*Fmag*(std::cos(x2)*x1-R0);
+	        F_y += -Sig*vol*Fmag*x1*std::sin(x2);
+	      }
+        // For now, doing nearest neighbor matching algorithm??
+        for(int l=0; l=nPtEval; l++){
+          angEval = 2*PI/nPtEval * (l+0.5);
+          x1Eval = rEval*std::cos(angEval)+R0;
+          x2Eval = rEval*std::sin(angEval);
+          drEval = std::sqrt((x1-x1Eval)*(x1-x1Eval)+(x2-x2Eval)*(x2-x2Eval))
+          if(drEval < drvalEvals[l]){
+            drvalEvals[l] = drEval;
+            // dA = ((2*pi/nPtEval)*rEval)
+            momX1dir = std::cos(x2)*(pmb->hydro->u(IM1,k,j,i)) - std::sin(x2)*(pmb->hydro->u(IM2,k,j,i));
+            momX2dir = std::sin(x2)*(pmb->hydro->u(IM1,k,j,i)) + std::cos(x2)*(pmb->hydro->u(IM2,k,j,i));
+            evalVals[l] = -((2*PI)/nPtEval)*rEval*((momX1dir)*(std::cos(angEval)) + (momX2dir)*(std::sin(angEval))); // -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
+          }
+        }
       }
     }
+  }
+
+
+  for(int l=0; l=nPtEval; l++){
+    AccRate += evalVals[l]
   }
   
   if (iout==0) {
     return F_x;
   } else if (iout == 1) {
     return F_y;
+  } else if (iout == 2) {
+    return AccRate;
   } else {
     return 0.;
   }
