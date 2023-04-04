@@ -1,0 +1,1 @@
+mpiexec -n 64 ../bin/athena -r ppd_cyl.00000.rst time/nlim=-1 > out.txt 2>&1 &

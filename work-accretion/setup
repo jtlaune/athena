@@ -1,0 +1,2 @@
+mpiexec -n 4 ../bin/athena -i athinput.ppd_cyl time/nlim=0
+../bin/athena -r ppd_cyl.00000.rst -m 64 | grep Total

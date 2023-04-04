@@ -458,6 +458,7 @@ int main(int argc, char *argv[]) {
 
     if (pmesh->turb_flag > 1) pmesh->ptrbd->Driving(); // driven turbulence
 
+    // start going down the task list
     for (int stage=1; stage<=ptlist->nstages; ++stage) {
       ptlist->DoTaskListOneStage(pmesh, stage);
       if (ptlist->CheckNextMainStage(stage)) {
@@ -474,7 +475,7 @@ int main(int argc, char *argv[]) {
       for (int stage=1; stage<=pststlist->nstages; ++stage)
         pststlist->DoTaskListOneStage(pmesh, stage);
     }
-
+    // UserWorkInLoop comes AFTER integration
     pmesh->UserWorkInLoop();
 
     pmesh->ncycle++;

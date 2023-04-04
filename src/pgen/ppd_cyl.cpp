@@ -35,6 +35,7 @@ namespace {
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
   Real rH_exclude, rSink, rEval;
+  int nPtEval;
 }
 
 Real DenProf(const Real rad);
@@ -130,6 +131,8 @@ void MeshBlock::UserWorkInLoop() {
       }
     }
   }
+  return;
+}
 
   // This exmaple comes from pgen/gr_torus.cpp
   // Prepare scratch arrays
@@ -211,9 +214,6 @@ void MeshBlock::UserWorkInLoop() {
     }
   }*/
 
-  return;
-}
-
 Real DenProf(const Real rad) {
   // Density profile Sigma(r)
   return(std::max(Sig0*std::pow(rad/R0, dslope), dfloor));
@@ -278,28 +278,32 @@ Real Measurements(MeshBlock *pmb, int iout) {
 	        F_x += Sig*vol*Fmag*(std::cos(x2)*x1-R0);
 	        F_y += -Sig*vol*Fmag*x1*std::sin(x2);
 	      }
-        // For now, doing nearest neighbor matching algorithm??
-        for(int l=0; l=nPtEval; l++){
-          angEval = 2*PI/nPtEval * (l+0.5);
-          x1Eval = rEval*std::cos(angEval)+R0;
-          x2Eval = rEval*std::sin(angEval);
-          drEval = std::sqrt((x1-x1Eval)*(x1-x1Eval)+(x2-x2Eval)*(x2-x2Eval))
-          if(drEval < drvalEvals[l]){
-            drvalEvals[l] = drEval;
-            // dA = ((2*pi/nPtEval)*rEval)
-            momX1dir = std::cos(x2)*(pmb->hydro->u(IM1,k,j,i)) - std::sin(x2)*(pmb->hydro->u(IM2,k,j,i));
-            momX2dir = std::sin(x2)*(pmb->hydro->u(IM1,k,j,i)) + std::cos(x2)*(pmb->hydro->u(IM2,k,j,i));
-            evalVals[l] = -((2*PI)/nPtEval)*rEval*((momX1dir)*(std::cos(angEval)) + (momX2dir)*(std::sin(angEval))); // -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
+        if (iout == 2) {
+          // For now, doing nearest neighbor matching algorithm??
+          for(int l=0; l<=nPtEval; l++){
+            angEval = 2*PI/nPtEval * (l+0.5);
+            x1Eval = rEval*std::cos(angEval)+R0;
+            x2Eval = rEval*std::sin(angEval);
+            drEval = std::sqrt((x1-x1Eval)*(x1-x1Eval)+(x2-x2Eval)*(x2-x2Eval));
+            if(drEval < drvalEvals[l]){
+              drvalEvals[l] = drEval;
+              // dA = ((2*pi/nPtEval)*rEval)
+              // -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
+              momX1dir = std::cos(x2)*(pmb->phydro->u(IM1,k,j,i)) - std::sin(x2)*(pmb->phydro->u(IM2,k,j,i));
+              momX2dir = std::sin(x2)*(pmb->phydro->u(IM1,k,j,i)) + std::cos(x2)*(pmb->phydro->u(IM2,k,j,i));
+              evalVals[l] = -((2*PI)/nPtEval)*rEval*((momX1dir)*(std::cos(angEval)) + (momX2dir)*(std::sin(angEval)));
+            }
           }
         }
       }
     }
   }
 
-
-  for(int l=0; l=nPtEval; l++){
-    AccRate += evalVals[l]
+if (iout == 2) {
+  for(int l=0; l<=nPtEval; l++){
+    AccRate += evalVals[l];
   }
+}
   
   if (iout==0) {
     return F_x;
@@ -307,7 +311,8 @@ Real Measurements(MeshBlock *pmb, int iout) {
     return F_y;
   } else if (iout == 2) {
     return AccRate;
-  } else {
+  } 
+  else {
     return 0.;
   }
 }

@@ -62,3 +62,6 @@ meshtest.dat
 
 # compiled doxygen file
 doc/doxy*
+
+# other stuff
+*.png
