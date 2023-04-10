@@ -250,14 +250,28 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
 }
 
 Real Measurements(MeshBlock *pmb, int iout) {
+  // User-defined history function. Must calculate a sum of values 
+  // within each MeshBlock & athena turns it into a global sum automatically.
   Real F_x=0, F_y=0, Sig, x1, x2, x3;
   Real rs, vol, Fmag, rsecn, rsoft, angEval, x1Eval, x2Eval;
   int is=pmb->is, ie=pmb->ie, js=pmb->js, je=pmb->je, ks=pmb->ks, ke=pmb->ke;
   Real drEval, momX1dir, momX2dir;
+  //int printed = 0;
   Real AccRate = 0;
+  bool InsideCell;
 
-  Real evalVals[nPtEval] = { 0 };
-  Real drvalEvals[nPtEval] = { 1 };
+  Real evalVals[nPtEval];
+  for(int l=0; l<=nPtEval; l++){
+    //std::cout << drvalEvals[l];
+    //std::cout << "\n";
+    evalVals[l] = 0;
+  }
+  //Real drvalEvals[nPtEval] = { 1 };
+  //for(int l=0; l<=nPtEval; l++){
+  //  //std::cout << drvalEvals[l];
+  //  //std::cout << "\n";
+  //  drvalEvals[l] = 1;
+  //}
   
   for(int k=ks; k<=ke; k++) {
     x3 = pmb->pcoord->x3v(k);
@@ -282,17 +296,29 @@ Real Measurements(MeshBlock *pmb, int iout) {
           // For now, doing nearest neighbor matching algorithm??
           for(int l=0; l<=nPtEval; l++){
             angEval = 2*PI/nPtEval * (l+0.5);
+            //std::cout << angEval;
+            //std::cout << " ";
             x1Eval = rEval*std::cos(angEval)+R0;
             x2Eval = rEval*std::sin(angEval);
-            drEval = std::sqrt((x1-x1Eval)*(x1-x1Eval)+(x2-x2Eval)*(x2-x2Eval));
-            if(drEval < drvalEvals[l]){
-              drvalEvals[l] = drEval;
-              // dA = ((2*pi/nPtEval)*rEval)
-              // -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
+            //drEval = std::sqrt((x1-x1Eval)*(x1-x1Eval)+(x2-x2Eval)*(x2-x2Eval));
+            // Here, Need to check if xEval is in the cell
+            // lol this is so bad
+            InsideCell = false;
+            if (((pmb->pcoord->x1f(i))<=x1Eval)&&( x1Eval<(pmb->pcoord->x1f(i+1)))) {
+              if (((pmb->pcoord->x2f(j))<=x2Eval)&&(x2Eval<(pmb->pcoord->x2f(j+1)))) {
+                InsideCell = true;
+              } 
+            }
+            //if(drEval < drvalEvals[l]){
+            // dA = ((2*pi/nPtEval)*rEval)
+            // -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
+            if (InsideCell) {
+              //drvalEvals[l] = drEval;
               momX1dir = std::cos(x2)*(pmb->phydro->u(IM1,k,j,i)) - std::sin(x2)*(pmb->phydro->u(IM2,k,j,i));
               momX2dir = std::sin(x2)*(pmb->phydro->u(IM1,k,j,i)) + std::cos(x2)*(pmb->phydro->u(IM2,k,j,i));
               evalVals[l] = -((2*PI)/nPtEval)*rEval*((momX1dir)*(std::cos(angEval)) + (momX2dir)*(std::sin(angEval)));
             }
+            //}
           }
         }
       }
@@ -301,7 +327,14 @@ Real Measurements(MeshBlock *pmb, int iout) {
 
 if (iout == 2) {
   for(int l=0; l<=nPtEval; l++){
+    //if(printed == 0){
+    //  std::cout << drvalEvals[l];
+    //  std::cout << "\n";
+    //}
+    //std::cout << evalVals[l];
+    //std::cout << "\n";
     AccRate += evalVals[l];
+    //printed += 1;
   }
 }
   
