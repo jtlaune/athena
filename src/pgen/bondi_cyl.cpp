@@ -31,7 +31,7 @@
 #include "../parameter_input.hpp"
 
 namespace {
-Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
+Real gm1, Sig0, dslope, pfloor, dfloor, R0, CS02, Omega0, soft_sat;
 Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
 Real rSink, rEval;
 int nPtEval;
@@ -51,6 +51,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 Real splineKernel(Real x);
 
 void Mesh::InitUserMeshData(ParameterInput *pin) {
+  EnrollUserExplicitSourceFunction(DiskSourceFunction);
   if (adaptive == true) {
     EnrollUserRefinementCondition(RefinementCondition);
   }
@@ -60,6 +61,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   EnrollUserHistoryOutput(2, Measurements, "AccretionEval");
 
   dfloor = pin->GetReal("hydro", "Sigma_floor");
+  pfloor = pin->GetReal("hydro", "P_floor");
 
   gm1 = pin->GetReal("problem", "GM_s");
   Sig0 = pin->GetReal("problem", "Sigma_0");
@@ -67,7 +69,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   R0 = pin->GetReal("problem", "R0");
   Omega0 = pin->GetReal("problem", "Omega0");
   soft_sat = pin->GetReal("problem", "soft_sat");
-  l_refine = pin->GetReal("problem", "l_refine");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
 
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
@@ -92,6 +93,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
   Real vk, vr, vth, Sig, Sig0, rprim, rsecn;
   Real x1, x2, x3;
   Real Fpr, Cs;
+
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
     x3 = pmb->pcoord->x3v(k);
     for (int j = pmb->js; j <= pmb->je; ++j) {
@@ -113,25 +115,25 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM2, k, j, i) += -Sig * dt * Cs * R0 * std::sin(x2);
 
         // wave damping regions
-        if ((rprim <= innerbdy) and (innerbdy != x1min)) {
-          Real x = (rprim - x1min) / (innerbdy - x1min);
-          Real factor = splineKernel(x);
-          cons(IDN, k, j, i) +=
-              -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_in;
-          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i)) / T_damp_in;
-          cons(IM2, k, j, i) +=
-              -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_in;
-        }
-        if ((rprim >= WDL1) and (WDL2 != WDL1)) {
-          Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
-          Real factor = splineKernel(x);
-          cons(IDN, k, j, i) +=
-              -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
-          cons(IM1, k, j, i) +=
-              -factor * dt * (cons(IM1, k, j, i)) / T_damp_bdy;
-          cons(IM2, k, j, i) +=
-              -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_bdy;
-        }
+        // if ((rprim <= innerbdy) and (innerbdy != x1min)) {
+        //   Real x = (rprim - x1min) / (innerbdy - x1min);
+        //   Real factor = splineKernel(x);
+        //   cons(IDN, k, j, i) +=
+        //       -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_in;
+        //   cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i)) /
+        //   T_damp_in; cons(IM2, k, j, i) +=
+        //       -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_in;
+        // }
+        // if ((rprim >= WDL1) and (WDL2 != WDL1)) {
+        //   Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
+        //   Real factor = splineKernel(x);
+        //   cons(IDN, k, j, i) +=
+        //       -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
+        //   cons(IM1, k, j, i) +=
+        //       -factor * dt * (cons(IM1, k, j, i)) / T_damp_bdy;
+        //   cons(IM2, k, j, i) +=
+        //       -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_bdy;
+        // }
       }
     }
   }
@@ -159,10 +161,18 @@ void MeshBlock::UserWorkInLoop() {
         x1 = pcoord->x1v(i);
         rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
         if (rsecn < rSink) {
-          phydro->w(IVX, k, j, i) = 0;
-          phydro->w(IVY, k, j, i) = 0;
-          phydro->w(IVZ, k, j, i) = 0;
-          phydro->w(IDN, k, j, i) = dfloor;
+          // phydro->w(IVX, k, j, i) = 0;
+          // phydro->w(IVY, k, j, i) = 0;
+          // phydro->w(IVZ, k, j, i) = 0;
+          //// USES EOS EQUATION OF STATE
+          // phydro->w(IDN, k, j, i) = dfloor;
+          // phydro->w(IPR, k, j, i) = dfloor*CS02;
+
+          // phydro->u(IDN, k, j, i) = dfloor;
+          // phydro->u(IM1, k, j, i) = 0;
+          // phydro->u(IM2, k, j, i) = 0;
+          // phydro->u(IM3, k, j, i) = 0;
+          // phydro->u(IDN, k, j, i) = dfloor;
         }
       }
     }
@@ -208,26 +218,18 @@ Real Measurements(MeshBlock *pmb, int iout) {
   // User-defined history function. Must calculate a sum of values
   // within each MeshBlock & athena turns it into a global sum automatically.
   Real F_x = 0, F_y = 0, Sig, x1, x2, x3;
-  Real rs, vol, Fmag, rsecn, rsoft, angEval, xEval, yEval;
+  Real rs, vol, Fmag, rsecn, rsoft;
   int is = pmb->is, ie = pmb->ie, js = pmb->js, je = pmb->je, ks = pmb->ks,
       ke = pmb->ke;
-  Real drEval, momX1dir, momX2dir;
+  Real momxEvaldir, momyEvaldir, angEval, xEval, yEval;
+  Real rf1, rf2, thf1, thf2;
+  Real rpeval, theval;
   Real AccRate = 0;
-  Real cartGridvx;
-  Real cartGridvy;
-  Real cartGridx_f1;
-  Real cartGridx_f2;
-  Real cartGridy_f1;
-  Real cartGridy_f2;
   bool InsideCell;
 
   Real evalVals[nPtEval];
   for (int l = 0; l <= nPtEval; l++) {
     evalVals[l] = 0;
-  }
-  Real drvalEvals[nPtEval];
-  for (int l = 0; l <= nPtEval; l++) {
-    drvalEvals[l] = 1;
   }
 
   for (int k = ks; k <= ke; k++) {
@@ -247,29 +249,36 @@ Real Measurements(MeshBlock *pmb, int iout) {
           for (int l = 0; l <= nPtEval; l++) {
             angEval = 2 * PI / nPtEval * l;
 
-            // polar volume-centered xy coordinates
-            cartGridvx = x1 * std::cos(x2);
-            cartGridvy = x1 * std::sin(x2);
-
             // sample locus of circle at secondary with radius rEval
             xEval = rEval * std::cos(angEval) + R0;
             yEval = rEval * std::sin(angEval);
 
-            drEval = std::sqrt((xEval - cartGridvx) * (xEval - cartGridvx) +
-                               (yEval - cartGridvy) * ((yEval - cartGridvy)));
+            rf1 = pmb->pcoord->x1f(i);
+            rf2 = pmb->pcoord->x1f(i + 1);
+            thf1 = pmb->pcoord->x2f(j);
+            thf2 = pmb->pcoord->x2f(j + 1);
+
+            InsideCell = false;
+            rpeval = sqrt(xEval * xEval + yEval * yEval);
+            theval = std::atan2(yEval, xEval);
+
+            if ((rf1 <= rpeval) && (rpeval < rf2)) {
+              if ((thf1 <= theval) && (theval < thf2)) {
+                InsideCell = true;
+              }
+            }
 
             if (InsideCell) {
-            //if (drEval < drvalEvals[l]) {
-              //  dA = ((2*pi/nPtEval)*rEval)
-              //  -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
-              momX1dir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
-                         std::sin(x2) * (pmb->phydro->u(IM2, k, j, i));
-              momX2dir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
-                         std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
-              evalVals[l] = -((2 * PI) / nPtEval) * rEval *
-                            ((momX1dir) * (std::cos(angEval)) +
-                             (momX2dir) * (std::sin(angEval)));
-              drvalEvals[l] = drEval;
+              // if (drEval < drvalEvals[l]) {
+              //   dA = ((2*pi/nPtEval)*rEval)
+              //   -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
+              momxEvaldir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
+                            std::sin(x2) * (pmb->phydro->u(IM2, k, j, i));
+              momyEvaldir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
+                            std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
+              evalVals[l] = ((2 * PI) / nPtEval) * rEval *
+                            ((momxEvaldir) * (std::cos(angEval)) +
+                             (momyEvaldir) * (std::sin(angEval)));
             }
           }
         }
@@ -289,7 +298,7 @@ Real Measurements(MeshBlock *pmb, int iout) {
 
       // drvalEvals[l] being different from its initialized value means it was
       // altered in this meshblock.
-      if (drvalEvals[l] < 1) {
+      if (evalVals[l] != 0) {
         AccRate += evalVals[l];
       }
     }
