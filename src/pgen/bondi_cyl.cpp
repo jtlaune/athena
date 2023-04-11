@@ -215,6 +215,10 @@ Real Measurements(MeshBlock *pmb, int iout) {
   Real AccRate = 0;
   Real cartGridvx;
   Real cartGridvy;
+  Real cartGridx_f1;
+  Real cartGridx_f2;
+  Real cartGridy_f1;
+  Real cartGridy_f2;
   bool InsideCell;
 
   Real evalVals[nPtEval];
@@ -247,14 +251,15 @@ Real Measurements(MeshBlock *pmb, int iout) {
             cartGridvx = x1 * std::cos(x2);
             cartGridvy = x1 * std::sin(x2);
 
-            // locus of circle at secondary with radius rEval
+            // sample locus of circle at secondary with radius rEval
             xEval = rEval * std::cos(angEval) + R0;
             yEval = rEval * std::sin(angEval);
 
             drEval = std::sqrt((xEval - cartGridvx) * (xEval - cartGridvx) +
                                (yEval - cartGridvy) * ((yEval - cartGridvy)));
 
-            if (drEval < drvalEvals[l]) {
+            if (InsideCell) {
+            //if (drEval < drvalEvals[l]) {
               //  dA = ((2*pi/nPtEval)*rEval)
               //  -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
               momX1dir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
@@ -274,7 +279,7 @@ Real Measurements(MeshBlock *pmb, int iout) {
 
   if (iout == 2) {
     for (int l = 0; l <= nPtEval; l++) {
-      // some diag-nosticing
+      // some diagnostic-ing
       // remember this outputs for each meshblock so this will stop the code
       // every time if (drvalEvals[l] == 1) {
       //  std::cout << l;
