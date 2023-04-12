@@ -487,6 +487,9 @@ int main(int argc, char *argv[]) {
 
     pmesh->NewTimeStep();
 
+    // see nb.migration-accretion.nb.2023.04.011
+    //pmesh->UserWorkInLoop();
+
 #ifdef ENABLE_EXCEPTIONS
     try {
 #endif
