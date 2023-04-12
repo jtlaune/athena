@@ -475,7 +475,7 @@ int main(int argc, char *argv[]) {
       for (int stage=1; stage<=pststlist->nstages; ++stage)
         pststlist->DoTaskListOneStage(pmesh, stage);
     }
-    // UserWorkInLoop comes AFTER integration
+    // Mesh::UserWorkInLoop comes AFTER integration
     pmesh->UserWorkInLoop();
 
     pmesh->ncycle++;
