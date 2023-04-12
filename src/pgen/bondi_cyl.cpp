@@ -33,7 +33,7 @@
 namespace {
 Real gm1, Sig0, dslope, pfloor, dfloor, R0, CS02, Omega0, soft_sat;
 Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
-Real rSink, rEval;
+Real rSink, rEval, nLevel;
 int nPtEval;
 } // namespace
 
@@ -70,6 +70,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   Omega0 = pin->GetReal("problem", "Omega0");
   soft_sat = pin->GetReal("problem", "soft_sat");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
+  nLevel = pin->GetReal("refinement", "level");
 
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
   WDL2 = pin->GetReal("problem", "WaveDampingLength_out");
@@ -149,33 +150,37 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 //     n,1: edot (energy flux across specified radius)
 //     n,2: jdot (angular momentum flux across specified radius)
 //     n,3: phi (magnetic flux through specified radius)
-
-void MeshBlock::UserWorkInLoop() {
+void Mesh::UserWorkInLoop() {
   Real rsecn, x1, x2, x3;
+  for (int bn = 0; bn < nblocal; ++bn) {
+    MeshBlock *pmb = my_blocks(bn);
+    // LogicalLocation &loc = pmb->loc;
+    // if (loc.level == nLevel) { // lowest level
+    for (int k = pmb->ks; k <= pmb->ke; k++) {
+      x3 = pmb->pcoord->x3v(k);
+      for (int j = pmb->js; j <= pmb->je; j++) {
+        x2 = pmb->pcoord->x2v(j);
+        for (int i = pmb->is; i <= pmb->ie; i++) {
+          x1 = pmb->pcoord->x1v(i);
+          rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
+          if (rsecn < rSink) {
+            pmb->phydro->w(IVX, k, j, i) = 0;
+            pmb->phydro->w(IVY, k, j, i) = 0;
+            pmb->phydro->w(IVZ, k, j, i) = 0;
+            // USES EOS EQUATION OF STATE
+            pmb->phydro->w(IDN, k, j, i) = dfloor;
+            pmb->phydro->w(IPR, k, j, i) = dfloor * CS02;
 
-  for (int k = ks; k <= ke; ++k) {
-    x3 = pcoord->x3v(k);
-    for (int j = js; j <= je; ++j) {
-      x2 = pcoord->x2v(j);
-      for (int i = is; i <= ie; ++i) {
-        x1 = pcoord->x1v(i);
-        rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
-        if (rsecn < rSink) {
-          // phydro->w(IVX, k, j, i) = 0;
-          // phydro->w(IVY, k, j, i) = 0;
-          // phydro->w(IVZ, k, j, i) = 0;
-          //// USES EOS EQUATION OF STATE
-          // phydro->w(IDN, k, j, i) = dfloor;
-          // phydro->w(IPR, k, j, i) = dfloor*CS02;
-
-          // phydro->u(IDN, k, j, i) = dfloor;
-          // phydro->u(IM1, k, j, i) = 0;
-          // phydro->u(IM2, k, j, i) = 0;
-          // phydro->u(IM3, k, j, i) = 0;
-          // phydro->u(IDN, k, j, i) = dfloor;
+            pmb->phydro->u(IDN, k, j, i) = dfloor;
+            pmb->phydro->u(IM1, k, j, i) = 0;
+            pmb->phydro->u(IM2, k, j, i) = 0;
+            pmb->phydro->u(IM3, k, j, i) = 0;
+            pmb->phydro->u(IDN, k, j, i) = dfloor;
+          }
         }
       }
     }
+    //}
   }
   return;
 }
