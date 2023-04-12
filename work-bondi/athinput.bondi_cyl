@@ -1,0 +1,88 @@
+<job>
+problem_id = bondi_cyl
+
+<output1>
+file_type   = hdf5 	# VTK data dump
+variable    = cons      #
+#dt          =  0.628318530718   # time increment between outputs
+dt = 0.006283
+#dcycle      = 1
+
+<output2>
+file_type   = hst       # History data dump
+dt          = 0.001 #0.628318530718   # time increment between outputs
+
+<output3>
+file_type = rst
+dt = 50
+
+<time>
+cfl_number = 0.3
+nlim = -1
+#tlim = 6283.18530718
+tlim = 0.0628318530718
+integrator = vl2
+xorder = 2
+ncycle_out = 1
+
+<mesh>
+nx1    = 64 
+x1min  = 0.5            # minimum value of X1
+x1max  = 1.5            # maximum value of X2
+ix1_bc = outflow	      # Inner-X1 boundary condition flag
+ox1_bc = outflow          # Outer-X1 boundary condition flag
+x1rat       = 1.0         # non-uniform grid ratio
+
+nx2    = 64 # Number of zones in X2-direction
+x2min  = -0.5
+x2max  = 0.5
+ix2_bc = outflow       # Inner-X2 boundary condition flag
+ox2_bc = outflow 	    # Outer-X2 boundary condition flag
+
+nx3    = 1              # Number of zones in X3-direction
+x3min  = -0.5           # minimum value of X3
+x3max  = 0.5            # maximum value of X3
+ix3_bc = periodic       # Inner-X3 boundary condition flag
+ox3_bc = periodic       # Outer-X3 boundary condition flag
+
+refinement = static
+
+<refinement>
+x1min = 0.95
+x1max = 1.05
+x2min = -0.05
+x2max = 0.05
+x3min = -1
+x3max = 1
+level = 3
+derefine_count=5
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+
+<hydro>
+iso_sound_speed = 0.01
+Sigma_floor 	= 1.e-9
+P_floor     	= 1.e-9
+
+<problem>
+GM_s = 0.01
+Sigma_0 = 1.0
+delta = -1.5
+R0 = 1.0
+Omega0 = 1.0
+soft_sat = 0.0001
+
+nu_iso = 0.001
+
+WaveDampingLength_in = 1.4
+WaveDampingLength_out = 1.6
+innerbdy = 0.6
+T_damp_bdy = 0.01
+T_damp_in = 0.01
+
+sink_radius = 0.012
+eval_radius = 0.024
+N_eval_pts = 50
