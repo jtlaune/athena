@@ -5,22 +5,22 @@ problem_id = bondi_cyl
 file_type   = hdf5 	# VTK data dump
 variable    = cons      #
 #dt          =  0.628318530718   # time increment between outputs
-dt = 0.006283
+dt = 3.1415926
 #dcycle      = 1
 
 <output2>
 file_type   = hst       # History data dump
-dt          = 0.001 #0.628318530718   # time increment between outputs
+dt          = 0.01 #0.628318530718   # time increment between outputs
 
 <output3>
 file_type = rst
-dt = 50
+dt = 6.28318530718
 
 <time>
 cfl_number = 0.3
 nlim = -1
 #tlim = 6283.18530718
-tlim = 0.0628318530718
+tlim = 62.8318530718
 integrator = vl2
 xorder = 2
 ncycle_out = 1
@@ -68,12 +68,12 @@ Sigma_floor 	= 1.e-9
 P_floor     	= 1.e-9
 
 <problem>
-GM_s = 0.01
+GM_s = 0.0001
 Sigma_0 = 1.0
 delta = -1.5
 R0 = 1.0
 Omega0 = 1.0
-soft_sat = 0.0001
+soft_sat = 0.01
 
 nu_iso = 0.001
 
