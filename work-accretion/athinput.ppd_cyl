@@ -9,7 +9,7 @@ dt          =  6.28318530718   # time increment between outputs
 
 <output2>
 file_type   = hst       # History data dump
-dt          = 0.628318530718   # time increment between outputs
+dt          = 0.0002 #0.628318530718   # time increment between outputs
 
 <output3>
 file_type = rst
@@ -76,5 +76,6 @@ T_damp_bdy = 0.01
 T_damp_in = 0.01
 
 sink_radius = 0.0115
-eval_radius = 0.02
+#eval_radius = 0.02
+eval_radius = 0.1
 N_eval_pts = 25
