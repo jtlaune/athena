@@ -209,13 +209,13 @@ Real Measurements(MeshBlock *pmb, int iout) {
                           std::sin(x2) * (pmb->phydro->u(IM2, k, j, i));
             momyEvaldir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
                           std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
-            FxEvals[l] = ((2 * PI) / nPtEval / Sig) *
+            FxEvals[l] = -((2 * PI) / nPtEval / Sig) *
                          (momxEvaldir * momxEvaldir * std::cos(angEval) +
                           momxEvaldir * momyEvaldir * std::cos(angEval));
-            FyEvals[l] = ((2 * PI) / nPtEval / Sig) *
+            FyEvals[l] = -((2 * PI) / nPtEval / Sig) *
                          (momyEvaldir * momxEvaldir * std::cos(angEval) +
                           momyEvaldir * momyEvaldir * std::cos(angEval));
-            evalVals[l] = ((2 * PI) / nPtEval) * rEval *
+            evalVals[l] = -((2 * PI) / nPtEval) * rEval *
                           ((momxEvaldir) * (std::cos(angEval)) +
                            (momyEvaldir) * (std::sin(angEval)));
           }
