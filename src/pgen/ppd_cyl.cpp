@@ -33,7 +33,7 @@
 namespace {
 Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
 Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
-Real rH_exclude, rSink, rEval;
+Real rSink, rEval;
 int nPtEval;
 } // namespace
 
@@ -63,10 +63,12 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (adaptive == true) {
     EnrollUserRefinementCondition(RefinementCondition);
   }
-  AllocateUserHistoryOutput(3);
+  AllocateUserHistoryOutput(5);
   EnrollUserHistoryOutput(0, Measurements, "Fs,grav_x=r");
   EnrollUserHistoryOutput(1, Measurements, "Fs,grav_y=th");
   EnrollUserHistoryOutput(2, Measurements, "AccretionEval");
+  EnrollUserHistoryOutput(3, Measurements, "momxAccretion");
+  EnrollUserHistoryOutput(4, Measurements, "momyAccretion");
 
   dfloor = pin->GetReal("hydro", "Sigma_floor");
 
@@ -77,7 +79,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   Omega0 = pin->GetReal("problem", "Omega0");
   soft_sat = pin->GetReal("problem", "soft_sat");
   l_refine = pin->GetReal("problem", "l_refine");
-  rH_exclude = pin->GetReal("problem", "rH_exclude");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
 
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
@@ -139,26 +140,25 @@ Real Measurements(MeshBlock *pmb, int iout) {
   // User-defined history function. Must calculate a sum of values
   // within each MeshBlock & athena turns it into a global sum automatically.
   Real F_x = 0, F_y = 0, Sig, x1, x2, x3;
-  Real rs, vol, Fmag, rsecn, rsoft, angEval, x1Eval, x2Eval;
+  Real rs, vol, Fmag, rsecn, rsoft;
   int is = pmb->is, ie = pmb->ie, js = pmb->js, je = pmb->je, ks = pmb->ks,
       ke = pmb->ke;
-  Real drEval, momX1dir, momX2dir;
-  // int printed = 0;
+  Real momxEvaldir, momyEvaldir, angEval, xEval, yEval;
+  Real rf1, rf2, thf1, thf2;
+  Real rpeval, theval;
   Real AccRate = 0;
+  Real momxRate = 0;
+  Real momyRate = 0;
   bool InsideCell;
 
+  Real FxEvals[nPtEval];
+  Real FyEvals[nPtEval];
   Real evalVals[nPtEval];
   for (int l = 0; l <= nPtEval; l++) {
-    // std::cout << drvalEvals[l];
-    // std::cout << "\n";
     evalVals[l] = 0;
+    FxEvals[l] = 0;
+    FyEvals[l] = 0;
   }
-  // Real drvalEvals[nPtEval] = { 1 };
-  // for(int l=0; l<=nPtEval; l++){
-  //   //std::cout << drvalEvals[l];
-  //   //std::cout << "\n";
-  //   drvalEvals[l] = 1;
-  // }
 
   for (int k = ks; k <= ke; k++) {
     x3 = pmb->pcoord->x3v(k);
@@ -171,15 +171,74 @@ Real Measurements(MeshBlock *pmb, int iout) {
         vol = pmb->pcoord->GetCellVolume(k, j, i);
 
         rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
+        rsoft = std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
 
-        if (rsecn > rH_exclude * std::pow(gm1 / 3., 1 / 3.)) {
-          rsoft = std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
-          Fmag = gm1 / rsoft / rsoft / rsoft;
-          // Fmag = gm1/rsecn/rsecn/rsecn;
-          F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
-          F_y += -Sig * vol * Fmag * x1 * std::sin(x2);
+        Fmag = gm1 / rsoft / rsoft / rsoft;
+        // Fmag = gm1/rsecn/rsecn/rsecn;
+        F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
+        F_y += Sig * vol * Fmag * x1 * std::sin(x2);
+
+        // For now, doing nearest neighbor matching algorithm??
+        for (int l = 0; l <= nPtEval; l++) {
+          angEval = 2 * PI / nPtEval * l;
+
+          // sample locus of circle at secondary with radius rEval
+          xEval = rEval * std::cos(angEval) + R0;
+          yEval = rEval * std::sin(angEval);
+
+          rf1 = pmb->pcoord->x1f(i);
+          rf2 = pmb->pcoord->x1f(i + 1);
+          thf1 = pmb->pcoord->x2f(j);
+          thf2 = pmb->pcoord->x2f(j + 1);
+
+          InsideCell = false;
+          rpeval = sqrt(xEval * xEval + yEval * yEval);
+          theval = std::atan2(yEval, xEval);
+
+          if ((rf1 <= rpeval) && (rpeval < rf2)) {
+            if ((thf1 <= theval) && (theval < thf2)) {
+              InsideCell = true;
+            }
+          }
+
+          if (InsideCell) {
+            // if (drEval < drvalEvals[l]) {
+            //   dA = ((2*pi/nPtEval)*rEval)
+            //   -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
+            momxEvaldir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
+                          std::sin(x2) * (pmb->phydro->u(IM2, k, j, i));
+            momyEvaldir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
+                          std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
+            FxEvals[l] = ((2 * PI) / nPtEval / Sig) *
+                         (momxEvaldir * momxEvaldir * std::cos(angEval) +
+                          momxEvaldir * momyEvaldir * std::cos(angEval));
+            FyEvals[l] = ((2 * PI) / nPtEval / Sig) *
+                         (momyEvaldir * momxEvaldir * std::cos(angEval) +
+                          momyEvaldir * momyEvaldir * std::cos(angEval));
+            evalVals[l] = ((2 * PI) / nPtEval) * rEval *
+                          ((momxEvaldir) * (std::cos(angEval)) +
+                           (momyEvaldir) * (std::sin(angEval)));
+          }
         }
       }
+    }
+  }
+
+  for (int l = 0; l <= nPtEval; l++) {
+    // some diagnostic-ing
+    // remember this outputs for each meshblock so this will stop the code
+    // every time if (drvalEvals[l] == 1) {
+    //  std::cout << l;
+    //  throw std::invalid_argument(
+    //      " <- dr was not minimized at this rEval circle index");
+    // }
+
+    // evalVals[l] being different from its initialized value means it was
+    // altered in this meshblock.
+    if (evalVals[l] != 0) {
+      momxRate += FxEvals[l];
+      momyRate += FyEvals[l];
+      AccRate += evalVals[l];
     }
   }
 
@@ -189,10 +248,15 @@ Real Measurements(MeshBlock *pmb, int iout) {
     return F_y;
   } else if (iout == 2) {
     return AccRate;
+  } else if (iout == 3) {
+    return momxRate;
+  } else if (iout == 4) {
+    return momyRate;
   } else {
     return 0.;
   }
 }
+
 Real splineKernel(Real x) {
   // smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0
   Real W;
@@ -206,6 +270,41 @@ Real splineKernel(Real x) {
     W = 0.;
   }
   return (W);
+}
+
+void Mesh::UserWorkInLoop() {
+  Real rsecn, x1, x2, x3;
+  for (int bn = 0; bn < nblocal; ++bn) {
+    MeshBlock *pmb = my_blocks(bn);
+    // LogicalLocation &loc = pmb->loc;
+    // if (loc.level == nLevel) { // lowest level
+    for (int k = pmb->ks; k <= pmb->ke; k++) {
+      x3 = pmb->pcoord->x3v(k);
+      for (int j = pmb->js; j <= pmb->je; j++) {
+        x2 = pmb->pcoord->x2v(j);
+        for (int i = pmb->is; i <= pmb->ie; i++) {
+          x1 = pmb->pcoord->x1v(i);
+          rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
+          if (rsecn < rSink) {
+            pmb->phydro->w(IVX, k, j, i) = 0;
+            pmb->phydro->w(IVY, k, j, i) = 0;
+            pmb->phydro->w(IVZ, k, j, i) = 0;
+            // USES EOS EQUATION OF STATE
+            pmb->phydro->w(IDN, k, j, i) = dfloor;
+            pmb->phydro->w(IPR, k, j, i) = dfloor * CS02;
+
+            pmb->phydro->u(IDN, k, j, i) = dfloor;
+            pmb->phydro->u(IM1, k, j, i) = 0;
+            pmb->phydro->u(IM2, k, j, i) = 0;
+            pmb->phydro->u(IM3, k, j, i) = 0;
+            pmb->phydro->u(IDN, k, j, i) = dfloor;
+          }
+        }
+      }
+    }
+    //}
+  }
+  return;
 }
 
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
