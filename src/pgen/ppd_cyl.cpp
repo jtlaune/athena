@@ -33,7 +33,7 @@
 namespace {
 Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
 Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
-Real rSink, rEval;
+Real rSink, rEval, sink_dens, r_exclude;
 int nPtEval;
 } // namespace
 
@@ -92,6 +92,9 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   rEval = pin->GetReal("problem", "eval_radius");
   nPtEval = pin->GetReal("problem", "N_eval_pts");
 
+  sink_dens = pin->GetReal("problem", "sink_dens");
+  r_exclude = pin->GetOrAddReal("problem", "r_exclude",0);
+
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
     EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
@@ -113,6 +116,7 @@ Real VelProf(const Real rad) {
 }
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
+  // std::cout << "Problem generating is being run";
   Real x1, x2, x3;
   Real Sig, vk, Cx, Cy;
   Real rprim;
@@ -173,10 +177,12 @@ Real Measurements(MeshBlock *pmb, int iout) {
         rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
         rsoft = std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
 
-        Fmag = gm1 / rsoft / rsoft / rsoft;
-        // Fmag = gm1/rsecn/rsecn/rsecn;
-        F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
-        F_y += Sig * vol * Fmag * x1 * std::sin(x2);
+        if (rsecn > r_exclude) {
+          Fmag = gm1 / rsoft / rsoft / rsoft;
+          // Fmag = gm1/rsecn/rsecn/rsecn;
+          F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
+          F_y += Sig * vol * Fmag * x1 * std::sin(x2);
+        }
 
         // For now, doing nearest neighbor matching algorithm??
         for (int l = 0; l <= nPtEval; l++) {
@@ -290,14 +296,14 @@ void Mesh::UserWorkInLoop() {
             pmb->phydro->w(IVY, k, j, i) = 0;
             pmb->phydro->w(IVZ, k, j, i) = 0;
             // USES EOS EQUATION OF STATE
-            pmb->phydro->w(IDN, k, j, i) = dfloor;
-            pmb->phydro->w(IPR, k, j, i) = dfloor * CS02;
+            pmb->phydro->w(IDN, k, j, i) = sink_dens;
+            pmb->phydro->w(IPR, k, j, i) = sink_dens * CS02;
 
-            pmb->phydro->u(IDN, k, j, i) = dfloor;
+            pmb->phydro->u(IDN, k, j, i) = sink_dens;
             pmb->phydro->u(IM1, k, j, i) = 0;
             pmb->phydro->u(IM2, k, j, i) = 0;
             pmb->phydro->u(IM3, k, j, i) = 0;
-            pmb->phydro->u(IDN, k, j, i) = dfloor;
+            pmb->phydro->u(IDN, k, j, i) = sink_dens;
           }
         }
       }
