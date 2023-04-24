@@ -321,9 +321,9 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM1, k, j, i) += Sig * dt * Cs * (std::cos(x2) * R0 - x1);
         cons(IM2, k, j, i) += -Sig * dt * Cs * R0 * std::sin(x2);
 
-        // Indirect? Do I need to add this?
-        // cons(IM1, k, j, i) += gm1*std::cos(x2)/(R0*R0+soft_sat*soft_sat);
-        // cons(IM2, k, j, i) += -gm1*std::sin(x2)/(R0*R0+soft_sat*soft_sat);
+        // Indirect terms arising from primary acceleration in +x direction.
+        cons(IM1, k, j, i) += -gm1 * dt * Sig * std::cos(x2) / (R0 * R0);
+        cons(IM2, k, j, i) += +gm1 * dt * Sig * std::sin(x2) / (R0 * R0);
 
         // Wave damping regions.
         if ((rprim <= innerbdy) and (innerbdy != x1min)) {
