@@ -63,12 +63,14 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   if (adaptive == true) {
     EnrollUserRefinementCondition(RefinementCondition);
   }
-  AllocateUserHistoryOutput(5);
-  EnrollUserHistoryOutput(0, Measurements, "Fs,grav_x=r");
-  EnrollUserHistoryOutput(1, Measurements, "Fs,grav_y=th");
-  EnrollUserHistoryOutput(2, Measurements, "AccretionEval");
-  EnrollUserHistoryOutput(3, Measurements, "momxAccretion");
-  EnrollUserHistoryOutput(4, Measurements, "momyAccretion");
+  AllocateUserHistoryOutput(7);
+  EnrollUserHistoryOutput(0, Measurements, "Fx_pressure");
+  EnrollUserHistoryOutput(1, Measurements, "Fy_pressure");
+  EnrollUserHistoryOutput(2, Measurements, "Fs,grav_x=r");
+  EnrollUserHistoryOutput(3, Measurements, "Fs,grav_y=th");
+  EnrollUserHistoryOutput(4, Measurements, "AccretionEval");
+  EnrollUserHistoryOutput(5, Measurements, "momxAccretion");
+  EnrollUserHistoryOutput(6, Measurements, "momyAccretion");
 
   dfloor = pin->GetReal("hydro", "Sigma_floor");
 
@@ -93,7 +95,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   nPtEval = pin->GetReal("problem", "N_eval_pts");
 
   sink_dens = pin->GetReal("problem", "sink_dens");
-  r_exclude = pin->GetOrAddReal("problem", "r_exclude",0);
+  r_exclude = pin->GetOrAddReal("problem", "gforce_r_exclude", 0);
 
   // enroll user-defined boundary condition
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
@@ -153,15 +155,22 @@ Real Measurements(MeshBlock *pmb, int iout) {
   Real AccRate = 0;
   Real momxRate = 0;
   Real momyRate = 0;
+  Real PxForce = 0;
+  Real PyForce = 0;
   bool InsideCell;
 
   Real FxEvals[nPtEval];
   Real FyEvals[nPtEval];
-  Real evalVals[nPtEval];
+  Real mDotEvalVals[nPtEval];
+  Real PxEvals[nPtEval];
+  Real PyEvals[nPtEval];
+
   for (int l = 0; l <= nPtEval; l++) {
-    evalVals[l] = 0;
+    mDotEvalVals[l] = 0;
     FxEvals[l] = 0;
     FyEvals[l] = 0;
+    PxEvals[l] = 0;
+    PyEvals[l] = 0;
   }
 
   for (int k = ks; k <= ke; k++) {
@@ -184,46 +193,59 @@ Real Measurements(MeshBlock *pmb, int iout) {
           F_y += Sig * vol * Fmag * x1 * std::sin(x2);
         }
 
-        // For now, doing nearest neighbor matching algorithm??
-        for (int l = 0; l <= nPtEval; l++) {
-          angEval = 2 * PI / nPtEval * l;
+        // For now, doing nearest neighbor.
+        if (rsecn < 2 * rEval) { // only do eval if we are near the sink
+          for (int l = 0; l <= nPtEval; l++) {
+            angEval = 2 * PI / nPtEval * l;
 
-          // sample locus of circle at secondary with radius rEval
-          xEval = rEval * std::cos(angEval) + R0;
-          yEval = rEval * std::sin(angEval);
+            // sample locus of circle at secondary with radius rEval
+            xEval = rEval * std::cos(angEval) + R0;
+            yEval = rEval * std::sin(angEval);
 
-          rf1 = pmb->pcoord->x1f(i);
-          rf2 = pmb->pcoord->x1f(i + 1);
-          thf1 = pmb->pcoord->x2f(j);
-          thf2 = pmb->pcoord->x2f(j + 1);
+            rf1 = pmb->pcoord->x1f(i);
+            rf2 = pmb->pcoord->x1f(i + 1);
+            thf1 = pmb->pcoord->x2f(j);
+            thf2 = pmb->pcoord->x2f(j + 1);
 
-          InsideCell = false;
-          rpeval = sqrt(xEval * xEval + yEval * yEval);
-          theval = std::atan2(yEval, xEval);
+            InsideCell = false;
+            rpeval = sqrt(xEval * xEval + yEval * yEval);
+            theval = std::atan2(yEval, xEval);
 
-          if ((rf1 <= rpeval) && (rpeval < rf2)) {
-            if ((thf1 <= theval) && (theval < thf2)) {
-              InsideCell = true;
+            if ((rf1 <= rpeval) && (rpeval < rf2)) {
+              if ((thf1 <= theval) && (theval < thf2)) {
+                InsideCell = true;
+              }
             }
-          }
 
-          if (InsideCell) {
-            // if (drEval < drvalEvals[l]) {
-            //   dA = ((2*pi/nPtEval)*rEval)
-            //   -Sig*((2*pi/nPtEval)*rEval)*(u1cos+u2sin)
-            momxEvaldir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
-                          std::sin(x2) * (pmb->phydro->u(IM2, k, j, i));
-            momyEvaldir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
-                          std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
-            FxEvals[l] = -((2 * PI) / nPtEval / Sig) *
-                         (momxEvaldir * momxEvaldir * std::cos(angEval) +
-                          momxEvaldir * momyEvaldir * std::cos(angEval));
-            FyEvals[l] = -((2 * PI) / nPtEval / Sig) *
-                         (momyEvaldir * momxEvaldir * std::cos(angEval) +
-                          momyEvaldir * momyEvaldir * std::cos(angEval));
-            evalVals[l] = -((2 * PI) / nPtEval) * rEval *
-                          ((momxEvaldir) * (std::cos(angEval)) +
-                           (momyEvaldir) * (std::sin(angEval)));
+            if (InsideCell) {
+              // Go from polar -> local cartesian.
+              // Because x2<<1 near the sink, this should not be a huge
+              // adjustment.
+              momxEvaldir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
+                            std::sin(x2) * (pmb->phydro->u(IM2, k, j, i));
+              momyEvaldir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
+                            std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
+
+              // USES BAROTROPIC EOS
+              // Force due to pressure.
+              PxEvals[l] = (2 * PI) * rEval / nPtEval * std::cos(angEval) *
+                           (-CS02 * Sig);
+              PyEvals[l] = (2 * PI) * rEval / nPtEval * std::sin(angEval) *
+                           (-CS02 * Sig);
+
+              // Force from accreted momentum
+              FxEvals[l] = -((2 * PI) * rEval / nPtEval / Sig) *
+                           (momxEvaldir * momxEvaldir * std::cos(angEval) +
+                            momxEvaldir * momyEvaldir * std::cos(angEval));
+              FyEvals[l] = -((2 * PI) * rEval / nPtEval / Sig) *
+                           (momyEvaldir * momxEvaldir * std::cos(angEval) +
+                            momyEvaldir * momyEvaldir * std::cos(angEval));
+
+              // Accretion rate
+              mDotEvalVals[l] = -((2 * PI) / nPtEval) * rEval *
+                                ((momxEvaldir) * (std::cos(angEval)) +
+                                 (momyEvaldir) * (std::sin(angEval)));
+            }
           }
         }
       }
@@ -231,32 +253,30 @@ Real Measurements(MeshBlock *pmb, int iout) {
   }
 
   for (int l = 0; l <= nPtEval; l++) {
-    // some diagnostic-ing
-    // remember this outputs for each meshblock so this will stop the code
-    // every time if (drvalEvals[l] == 1) {
-    //  std::cout << l;
-    //  throw std::invalid_argument(
-    //      " <- dr was not minimized at this rEval circle index");
-    // }
-
     // evalVals[l] being different from its initialized value means it was
     // altered in this meshblock.
-    if (evalVals[l] != 0) {
+    if (mDotEvalVals[l] != 0) {
+      PxForce += PxEvals[l];
+      PyForce += PyEvals[l];
       momxRate += FxEvals[l];
       momyRate += FyEvals[l];
-      AccRate += evalVals[l];
+      AccRate += mDotEvalVals[l];
     }
   }
 
   if (iout == 0) {
-    return F_x;
+    return PxForce;
   } else if (iout == 1) {
-    return F_y;
+    return PyForce;
   } else if (iout == 2) {
-    return AccRate;
+    return F_x;
   } else if (iout == 3) {
-    return momxRate;
+    return F_y;
   } else if (iout == 4) {
+    return AccRate;
+  } else if (iout == 5) {
+    return momxRate;
+  } else if (iout == 6) {
     return momyRate;
   } else {
     return 0.;
@@ -264,7 +284,9 @@ Real Measurements(MeshBlock *pmb, int iout) {
 }
 
 Real splineKernel(Real x) {
-  // smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0
+  // Smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0.
+  // Used for the wave damping zones at radial boundary (with appropriate
+  // definitions for x).
   Real W;
   if (x < 0) {
     W = 1.;
@@ -295,7 +317,8 @@ void Mesh::UserWorkInLoop() {
             pmb->phydro->w(IVX, k, j, i) = 0;
             pmb->phydro->w(IVY, k, j, i) = 0;
             pmb->phydro->w(IVZ, k, j, i) = 0;
-            // USES EOS EQUATION OF STATE
+
+            // USES BAROTROPIC EOS
             pmb->phydro->w(IDN, k, j, i) = sink_dens;
             pmb->phydro->w(IPR, k, j, i) = sink_dens * CS02;
 
@@ -335,31 +358,32 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         Sig0 = DenProf(rprim);
         Sig = prim(IDN, k, j, i);
 
-        // primary gravity
+        // Primary gravity.
+        // No softening because it is off-grid.
         Fpr = -1. / rprim / rprim;
         cons(IM1, k, j, i) += dt * Sig * Fpr;
         cons(IM2, k, j, i) += 0;
 
-        // centrifugal
+        // Centrifugal force.
         cons(IM1, k, j, i) += dt * Sig * Omega0 * Omega0 * rprim;
 
-        // coriolis
+        // Coriolis force.
         vr = prim(IM1, k, j, i);
         vth = prim(IM2, k, j, i);
         cons(IM1, k, j, i) += 2 * dt * Sig * Omega0 * vth;
         cons(IM2, k, j, i) += -2 * dt * Sig * Omega0 * vr;
 
-        // satellite gravity
+        // Satellite gravity, softened by soft_sat.
         Cs = gm1 / (rsecn * rsecn + soft_sat * soft_sat) /
              std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
         cons(IM1, k, j, i) += Sig * dt * Cs * (std::cos(x2) * R0 - x1);
         cons(IM2, k, j, i) += -Sig * dt * Cs * R0 * std::sin(x2);
 
-        // indirect
+        // Indirect? Do I need to add this?
         // cons(IM1, k, j, i) += gm1*std::cos(x2)/(R0*R0+soft_sat*soft_sat);
         // cons(IM2, k, j, i) += -gm1*std::sin(x2)/(R0*R0+soft_sat*soft_sat);
 
-        // wave damping regions
+        // Wave damping regions.
         if ((rprim <= innerbdy) and (innerbdy != x1min)) {
           Real x = (rprim - x1min) / (innerbdy - x1min);
           Real factor = splineKernel(x);
