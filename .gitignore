@@ -65,3 +65,5 @@ doc/doxy*
 
 # other stuff
 *.png
+
+__pycache__/
