@@ -69,3 +69,4 @@ doc/doxy*
 __pycache__/
 work*
 .vscode/
+*.npz
