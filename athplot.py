@@ -1,9 +1,12 @@
 from matplotlib import ticker
+from matplotlib import colors
+import os
 import sys
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from mpl_styles import analytic
+import yt
 
 sys.path.insert(0, "/home/astrosun/jtlaune/athena/vis/python/")
 import athena_read as athr
@@ -26,30 +29,32 @@ def plotAdjustKwargs(fig, ax, **kwargs):
         ax.yaxis.set_tick_params(labelsize=kwargs["yTickLabelSize"])
 
 
-class Raw_Data_Restricted:
+class rawDataRestricted:
     """
     Author: Rixin Li, 16 May 2023
     """
 
-    def __init__(self, filename, q=None, **kwargs):
+    def __init__(self, filename, quantities=None, **kwargs):
         ds_raw = athr.athdf(
             filename,
             raw=True,
-            quantities=q,
+            quantities=quantities,
         )
         self.ds_raw = ds_raw
         self.filename = filename
 
-        if q is None:  # todo: check if input quantities are included in VariableNames
+        if (
+            quantities is None
+        ):  # todo: check if input quantities are included in VariableNames
             self.quantities = [
                 x.decode("ascii", "replace") for x in ds_raw["VariableNames"][:]
             ]
-        elif isinstance(q, str):
+        elif isinstance(quantities, str):
             self.quantities = [
-                q,
+                quantities,
             ]
         else:
-            self.quantities = q
+            self.quantities = quantities
 
         # mostly copied from athena_read.py
         self.block_size = ds_raw["MeshBlockSize"]
@@ -279,18 +284,133 @@ class Raw_Data_Restricted:
                 nx_vals.append(
                     self.root_grid_size[d] * 2**self.max_level + 2 * num_ghost
                 )
-        nx1 = nx_vals[0]
-        nx2 = nx_vals[1]
-        nx3 = nx_vals[2]
-        lx1 = nx1 // self.block_size[0]
-        lx2 = nx2 // self.block_size[1]
-        lx3 = nx3 // self.block_size[2]
+        self.nx1 = nx_vals[0]
+        self.nx2 = nx_vals[1]
+        self.nx3 = nx_vals[2]
+        lx1 = self.nx1 // self.block_size[0]
+        lx2 = self.nx2 // self.block_size[1]
+        lx3 = self.nx3 // self.block_size[2]
         num_extended_dims = 0
         for nx in nx_vals:
             if nx > 1:
                 num_extended_dims += 1
 
         return num_extended_dims
+
+    def plot2d(self, var, fig, ax, nlev, vmin, vmax):
+        for lev in range(nlev):
+            cccs, lds = self.get_level(
+                lev
+            )  # meaning: cell center coordinates, level data set
+            meshr, meshphi = np.meshgrid(cccs[0], cccs[1])
+            im = ax.pcolormesh(
+                meshr,
+                meshphi,
+                lds[var],
+                shading="nearest",
+                cmap="inferno",
+                norm=colors.LogNorm(vmin,vmax),
+            )
+
+
+class PpdCylAthhdf5(object):
+    def __init__(self, q, rootGrid, filename, outdir, quantities=None, **kwargs):
+        """
+        q =     planet/star mass ratio
+        rootGrid =      (Nx1,Nx2) of the rood grid
+        """
+        self.q = q
+        self.filename = filename
+        self.ds = yt.load(self.filename)
+        self.nx1 = rootGrid[0]
+        self.nx2 = rootGrid[1]
+        self.data_dict = None
+
+        _, outname = os.path.split(self.filename)
+        outname, _ = os.path.splitext(outname)
+        outname = outname + ".npz"
+        self.outname = os.path.join(outdir, outname)
+
+    def load(self):
+        if os.path.exists(self.outname):
+            self.data_dict = np.load(self.outname)
+        else:
+            self.reduce()
+        return self.data_dict
+
+    def reduce(self):
+        """
+        Calculates "Sig", "Fx_g", "Fy_g", "Fx_g_rHexcl", "Fy_g_rHexcl", "Mdot", radial profiles.
+        TODO: "Edot", "Jdot" profiles
+        """
+        self.radProfs = {}
+
+        q = self.q
+        rH = (q / 3) ** (1.0 / 3)
+
+        dd = self.ds.all_data()
+
+        dens_data = np.array(dd["athena_pp", "dens"])
+        vr_data = np.array(dd["athena_pp", "mom1"]) / dens_data
+        coords = np.array(dd.fcoords)
+        fwidths = np.array(dd.fwidth)
+
+        Nr = self.nx1
+        istart = 0
+        iend = Nr + 1
+
+        edge_coords = np.linspace(0.4, 1.6, iend, endpoint=True)
+        midpts = (edge_coords[:-1] + edge_coords[1:]) / 2
+
+        mRing = np.zeros(Nr)
+        mDotRing = np.zeros(Nr)
+        GFxProf = np.zeros(Nr)
+        GFyProf = np.zeros(Nr)
+        GFx_rHexclProf = np.zeros(Nr)
+        GFy_rHexclProf = np.zeros(Nr)
+
+        for i in range(len(dens_data)):
+            Sig = dens_data[i]
+            vr = vr_data[i]
+            r = coords[i, 0]
+            phi = coords[i, 1]
+            for j in range(istart, iend):
+                if edge_coords[j] < r < edge_coords[j + 1]:
+                    rsecn = np.sqrt(r**2 + 1 - 2 * r * np.cos(phi))
+                    x = r * np.cos(phi)
+                    y = r * np.sin(phi)
+
+                    dr = fwidths[i, 0]
+                    dphi = fwidths[i, 1]
+                    dA = r * dr * dphi
+
+                    GdFx = dA * Sig * q * (1 - x) / rsecn**3
+                    GdFy = -dA * Sig * q * y / rsecn**3
+                    GFxProf[j] += GdFx
+                    GFyProf[j] += GdFy
+
+                    dm = dA * Sig
+                    dmDot = r * dphi * Sig * vr
+                    mRing[j] += dm
+                    mDotRing[j] = dmDot
+
+                    if np.sqrt((x - 1.0) ** 2 + (y) ** 2) > rH:
+                        GFx_rHexclProf[j] += GdFx
+                        GFy_rHexclProf[j] += GdFy
+
+        SigProf = mRing / (2 * np.pi * midpts[:] * np.diff(edge_coords)[:])
+        np.savez(
+            self.outname,
+            Sig=SigProf,
+            Fx_g=GFxProf,
+            Fy_g=GFyProf,
+            Fx_g_rHexcl=GFx_rHexclProf,
+            Fy_g_rHexcl=GFy_rHexclProf,
+            Mdot=mDotRing,
+            rEdgeCoords=edge_coords,
+            rMidpts=midpts,
+        )
+        self.data_dict = np.load(self.outname)
 
 
 class athhst(object):
@@ -311,7 +431,7 @@ class athhst(object):
         self.momy_accrate = self.data[:it, -1]
 
     @mpl.rc_context(analytic)
-    def plotGravTorq(self, **kwargs):
+    def plotGravTorq(self, label, **kwargs):
         """
         kwargs
         figax=      (fig, ax)
@@ -324,38 +444,53 @@ class athhst(object):
             fig = kwargs["figax"][0]
             ax = kwargs["figax"][1]
 
+        if "c" in kwargs.keys():
+            cl = kwargs["c"]
+        else:
+            cl = "k"
+
+        totTorq = self.Fsgrav_y + self.momy_accrate + self.FP_y
+        ax.plot(
+            self.t,
+            totTorq,
+            c=cl,
+            lw=2,
+            ls="-",
+            label=f"{label}" + r", $\mathtt{tot}$",
+            zorder=-5,
+        )
         ax.plot(
             self.t,
             self.Fsgrav_y,
-            c="r",
+            c=cl,
             lw=2,
-            ls="-",
-            label=r"Accreting, $\mathtt{grav}$",
+            ls="--",
+            label=f"{label}" + r", $\mathtt{grav}$",
             zorder=-5,
         )
         ax.plot(
             self.t,
             self.momy_accrate,
-            c="r",
+            c=cl,
             lw=2,
-            ls="--",
-            label=r"Accreting, $\mathtt{accr}$",
+            ls="-.",
+            label=f"{label}" + r" $\mathtt{accr}$",
             zorder=-5,
         )
         ax.plot(
             self.t,
             self.FP_y,
-            c="r",
+            c=cl,
             lw=2,
-            ls="-.",
-            label=r"Accreting, $\mathtt{pres}$",
+            ls=":",
+            label=f"{label}" + r", $\mathtt{pres}$",
             zorder=-5,
         )
 
         ax.set_xlim((self.t[0], self.t[-1]))
         plotAdjustKwargs(fig, ax, **kwargs)
         ax.grid(True)
-        ax.set_ylabel(r"$-\Gamma/(M_pR_0^2\Omega^2)$")
+        ax.set_ylabel(r"$\Gamma/(M_pR_0^2\Omega^2)$")
         ax.set_xlabel(r"$T/(2\pi\Omega^{-1})$")
 
         ax.legend(bbox_to_anchor=[1.0, 1.0, 0, 0])

@@ -50,12 +50,6 @@ def main(**kwargs):
                 x = []
                 y = []
                 z = []
-    circ = plt.Circle((1,0),0.032, color='r',fill=False,lw=2,zorder=100000)
-    ax.add_patch(circ)
-    circ = plt.Circle((1,0),0.00032, color='r',fill=False,zorder=100001)
-    ax.add_patch(circ)
-    circ = plt.Circle((1,0),0.00036, color='r',fill=False,zorder=100001)
-    ax.add_patch(circ)
 
     plt.axis("off")
 
