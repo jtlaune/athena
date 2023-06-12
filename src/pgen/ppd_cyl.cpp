@@ -31,14 +31,18 @@
 #include "../parameter_input.hpp"
 
 namespace {
-Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat, nu_iso;
-Real T_damp_bdy, WDL1, WDL2, x1min, l_refine;
+Real gm1, ovSig, lambda, dfloor, R0, CS02, Omega0, soft_sat, nu_iso;
+Real T_damp_bdy, WDL1, WDL2, x1min, x1max, l_refine;
 Real rSink, rEval, sink_dens, r_exclude;
 int nPtEval;
 } // namespace
 
 Real DenProf(const Real rad);
+Real dDenProfdr(const Real rad);
 Real VelProf(const Real rad);
+Real dPresProfdr(const Real rad);
+Real csProf(const Real rad);
+Real dcsProfdr(const Real rad);
 int RefinementCondition(MeshBlock *pmb);
 Real Measurements(MeshBlock *pmb, int iout);
 
@@ -80,16 +84,17 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   gm1 = pin->GetReal("problem", "GM_s");
   soft_sat = pin->GetReal("problem", "soft_sat");
   // Disk parameters.
-  Sig0 = pin->GetReal("problem", "Sigma_0");
-  dslope = pin->GetReal("problem", "delta");
+  ovSig = pin->GetReal("problem", "overlineSigma");
+  lambda = pin->GetReal("problem", "lambda");
   R0 = pin->GetReal("problem", "R0");
   Omega0 = pin->GetReal("problem", "Omega0");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
-  nu_iso = SQR(pin->GetReal("problem", "nu_iso"));
+  nu_iso = pin->GetReal("problem", "nu_iso");
   // Boundary conditions.
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
   WDL2 = pin->GetReal("problem", "WaveDampingLength_out");
   x1min = pin->GetReal("mesh", "x1min");
+  x1max = pin->GetReal("mesh", "x1max");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   // Sink parameters.
   rSink = pin->GetReal("problem", "sink_radius");
@@ -126,14 +131,36 @@ Real splineKernel(Real x) {
   return (W);
 }
 
+/*
+  These functions with "Prof" in their name are the unperturbed steady state (parameterized) background profiles.
+*/
+
 Real DenProf(const Real rad) {
-  // Density profile Sigma(r)
-  return (std::max(Sig0 * std::pow(rad / R0, dslope), dfloor));
+  // Density profile Sigma(r) (unperturbed)
+  return ovSig*(std::sqrt(x1max/rad)-1);
+}
+
+Real dDenProfdr(const Real rad) {
+  // Derivative of density profile d(Sigma(r))/dr (unperturbed)
+  return -ovSig*0.5*std::sqrt(x1max)/std::pow(rad,-1.5);
+}
+
+Real csProf(const Real rad) {
+  
+}
+
+Real dcsProfdr(const Real rad) {
+
+}
+
+Real dPresProfdr(const Real rad) {
+  return 
 }
 
 Real VelProf(const Real rad) {
   // Velocity profile v(r)
-  return std::sqrt(dslope * CS02 + 1 / rad) - Omega0 * rad;
+  Real dPdr = dPresProfdr(rad);
+  return std::sqrt(dPdr + 1 / rad) - Omega0 * rad;
 }
 
 Real Measurements(MeshBlock *pmb, int iout) {
