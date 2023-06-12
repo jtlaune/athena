@@ -32,7 +32,7 @@
 
 namespace {
 Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat, nu_iso;
-Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
+Real T_damp_bdy, WDL1, WDL2, x1min, l_refine;
 Real rSink, rEval, sink_dens, r_exclude;
 int nPtEval;
 } // namespace
@@ -89,10 +89,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   // Boundary conditions.
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
   WDL2 = pin->GetReal("problem", "WaveDampingLength_out");
-  innerbdy = pin->GetReal("problem", "innerbdy");
   x1min = pin->GetReal("mesh", "x1min");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
-  T_damp_in = pin->GetReal("problem", "T_damp_in");
   // Sink parameters.
   rSink = pin->GetReal("problem", "sink_radius");
   rEval = pin->GetReal("problem", "eval_radius");
@@ -346,7 +344,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real x1, x2, x3;
   Real Sig, vk, Cx, Cy;
-  Real rprim;
+  Real rprim, vr0;
   for (int k = ks; k <= ke; ++k) {
     x3 = pcoord->x3v(k);
     for (int j = js; j <= je; ++j) {
@@ -357,9 +355,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         rprim = x1;
         Sig = DenProf(rprim);
         vk = VelProf(rprim);
+        vr0 = -1.5 * nu_iso / rprim;
 
         phydro->u(IDN, k, j, i) = Sig;
-        phydro->u(IM1, k, j, i) = 0.;
+        phydro->u(IM1, k, j, i) = Sig * vr0;
         phydro->u(IM2, k, j, i) = Sig * vk;
         phydro->u(IM3, k, j, i) = 0.;
       }
@@ -429,12 +428,12 @@ void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       for (int i = 1; i <= ngh; ++i) {
 
         prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
-        prim(IVY, k, j, il - i) = prim(IVX, k, j, il);
+        prim(IVY, k, j, il - i) = prim(IVY, k, j, il);
         prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
         vr = prim(IVX, k, j, il);
         if (vr <= 0) {
-          prim(IVX, k, j, il - i) = prim(IM1, k, j, il);
+          prim(IVX, k, j, il - i) = prim(IVX, k, j, il);
         } else {
           prim(IVX, k, j, il - i) = 0;
         }
