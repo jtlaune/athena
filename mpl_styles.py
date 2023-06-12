@@ -34,4 +34,5 @@ analytic = {
     "ytick.major.pad": 5,
     "font.family": "serif",
     "font.serif": "Computer Modern",
+    "axes.axisbelow": False,
 }
