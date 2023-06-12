@@ -332,7 +332,7 @@ def athdf(filename, raw=False, data=None, quantities=None, dtype=None, level=Non
           return_levels=False, subsample=False, fast_restrict=False, x1_min=None,
           x1_max=None, x2_min=None, x2_max=None, x3_min=None, x3_max=None, vol_func=None,
           vol_params=None, face_func_1=None, face_func_2=None, face_func_3=None,
-          center_func_1=None, center_func_2=None, center_func_3=None, num_ghost=0):
+          center_func_1=None, center_func_2=None, center_func_3=None, num_ghost=0, **kwargs):
     """Read .athdf files and populate dict of arrays of data.
 
 
@@ -396,7 +396,7 @@ def athdf(filename, raw=False, data=None, quantities=None, dtype=None, level=Non
     # Open file
     with h5py.File(filename, 'r') as f:
         # Extract size information
-        max_level = f.attrs['MaxLevel']
+        max_level = kwargs.get("max_level", f.attrs['MaxLevel'])
         if level is None:
             level = max_level
         block_size = f.attrs['MeshBlockSize']
