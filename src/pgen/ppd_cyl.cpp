@@ -31,7 +31,7 @@
 #include "../parameter_input.hpp"
 
 namespace {
-Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
+Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat, nu_iso;
 Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
 Real rSink, rEval, sink_dens, r_exclude;
 int nPtEval;
@@ -49,7 +49,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar);
 // User-defined boundary conditions for disk simulations
-void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh);
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
@@ -85,6 +85,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   R0 = pin->GetReal("problem", "R0");
   Omega0 = pin->GetReal("problem", "Omega0");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
+  nu_iso = SQR(pin->GetReal("problem", "nu_iso"));
   // Boundary conditions.
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
   WDL2 = pin->GetReal("problem", "WaveDampingLength_out");
@@ -102,7 +103,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
 
   // Enroll user-defined boundary condition.
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
-    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
+    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiodeOutInnerX1);
   }
   if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user")) {
     EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
@@ -283,7 +284,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &prim_scalar,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar) {
-  Real vk, vr, vth, Sig, Sig0, rprim, rsecn;
+  Real vk, vr, vr0, vth, Sig, Sig0, rprim, rsecn;
   Real x1, x2, x3;
   Real Fpr, Cs;
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
@@ -326,22 +327,14 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM2, k, j, i) += +gm1 * dt * Sig * std::sin(x2) / (R0 * R0);
 
         // Wave damping regions.
-        if ((rprim <= innerbdy) and (innerbdy != x1min)) {
-          Real x = (rprim - x1min) / (innerbdy - x1min);
-          Real factor = splineKernel(x);
-          cons(IDN, k, j, i) +=
-              -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_in;
-          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i)) / T_damp_in;
-          cons(IM2, k, j, i) +=
-              -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_in;
-        }
         if ((rprim >= WDL1) and (WDL2 != WDL1)) {
           Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
           Real factor = splineKernel(x);
+          vr0 = -1.5 * nu_iso / rprim;
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
           cons(IM1, k, j, i) +=
-              -factor * dt * (cons(IM1, k, j, i)) / T_damp_bdy;
+              -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_bdy;
           cons(IM2, k, j, i) +=
               -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_bdy;
         }
@@ -427,25 +420,24 @@ int RefinementCondition(MeshBlock *pmb) {
   return (cond);
 }
 
-void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh) {
-  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
+void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                     FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                     int ju, int kl, int ku, int ngh) {
+  Real vr;
   for (int k = kl; k <= ku; ++k) {
-    x3 = pco->x3v(k);
     for (int j = jl; j <= ju; ++j) {
-      x2 = pco->x2v(j);
       for (int i = 1; i <= ngh; ++i) {
-        x1 = pco->x1v(il - i);
 
-        rprim = x1;
-        Sig = DenProf(rprim);
-        vk = VelProf(rprim);
+        prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
+        prim(IVY, k, j, il - i) = prim(IVX, k, j, il);
+        prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
-        prim(IDN, k, j, il - i) = Sig;
-        prim(IM1, k, j, il - i) = 0.;
-        prim(IM2, k, j, il - i) = vk;
-        prim(IM3, k, j, il - i) = 0.;
+        vr = prim(IVX, k, j, il);
+        if (vr <= 0) {
+          prim(IVX, k, j, il - i) = prim(IM1, k, j, il);
+        } else {
+          prim(IVX, k, j, il - i) = 0;
+        }
       }
     }
   }
@@ -454,7 +446,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh) {
-  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
+  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy, vr;
   for (int k = kl; k <= ku; ++k) {
     x3 = pco->x3v(k);
     for (int j = jl; j <= ju; ++j) {
@@ -465,11 +457,12 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         rprim = x1;
         Sig = DenProf(rprim);
         vk = VelProf(rprim);
+        vr = -1.5 * nu_iso / rprim;
 
         prim(IDN, k, j, iu + i) = Sig;
-        prim(IM1, k, j, iu + i) = 0.;
-        prim(IM2, k, j, iu + i) = vk;
-        prim(IM3, k, j, iu + i) = 0.;
+        prim(IVX, k, j, iu + i) = vr;
+        prim(IVY, k, j, iu + i) = vk;
+        prim(IVZ, k, j, iu + i) = 0.;
       }
     }
   }
