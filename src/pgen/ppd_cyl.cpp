@@ -176,7 +176,7 @@ Real dPresProfdr(const Real rad){
 }
 
 Real RadVelProf(const Real rad){
-  return 3*nu_iso/(2*(rad*R0));
+  return -3*nu_iso/(2*(rad*R0));
 }
 
 Real AzimVelProf(const Real rad)
@@ -411,7 +411,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         {
           Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
           Real factor = splineKernel(x);
-          vr0 = -1.5 * nu_iso / rprim;
+          vr0 = RadVelProf(rprim);//-1.5 * nu_iso / rprim;
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
           cons(IM1, k, j, i) +=
@@ -442,7 +442,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
         rprim = x1;
         Sig = DenProf(rprim);
         vk = AzimVelProf(rprim);
-        vr0 = -1.5 * nu_iso / rprim;
+        vr0 = RadVelProf(rprim);//-1.5 * nu_iso / rprim;
 
         phydro->u(IDN, k, j, i) = Sig;
         phydro->u(IM1, k, j, i) = Sig * vr0;
@@ -528,18 +528,19 @@ void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       {
 
         prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
+        prim(IVX, k, j, il - i) = prim(IVX, k, j, il);
         prim(IVY, k, j, il - i) = prim(IVY, k, j, il);
         prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
-        vr = prim(IVX, k, j, il);
-        if (vr <= 0)
-        {
-          prim(IVX, k, j, il - i) = prim(IVX, k, j, il);
-        }
-        else
-        {
-          prim(IVX, k, j, il - i) = 0;
-        }
+        //vr = prim(IVX, k, j, il);
+        //if (vr <= 0)
+        //{
+        //  prim(IVX, k, j, il - i) = vr;
+        //}
+        //else
+        //{
+        //  prim(IVX, k, j, il - i) = 0;
+        //}
       }
     }
   }
@@ -563,7 +564,7 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         rprim = x1;
         Sig = DenProf(rprim);
         vk = AzimVelProf(rprim);
-        vr = -1.5 * nu_iso / rprim;
+        vr = RadVelProf(rprim);//-1.5 * nu_iso / rprim;
 
         prim(IDN, k, j, iu + i) = Sig;
         prim(IVX, k, j, iu + i) = vr;
