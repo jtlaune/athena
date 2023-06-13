@@ -32,7 +32,7 @@
 
 namespace
 {
-  Real gm1, ovSig, lambda, dfloor, R0, CS02, Omega0, soft_sat, nu_iso;
+  Real gm1, ovSig, lambda, dfloor, pfloor, R0, cs0, CS02, Omega0, soft_sat, nu_iso;
   Real T_damp_bdy, WDL1, WDL2, x1min, x1max, l_refine;
   Real rSink, rEval, sink_dens, r_exclude;
   int nPtEval;
@@ -40,10 +40,10 @@ namespace
 
 Real DenProf(const Real rad);
 Real dDenProfdr(const Real rad);
-Real VelProf(const Real rad);
+Real AzimVelProf(const Real rad);
+Real RadVelProf(const Real rad);
 Real dPresProfdr(const Real rad);
-Real csProf(const Real rad);
-Real dcsProfdr(const Real rad);
+// Real hProf(const Real rad);
 int RefinementCondition(MeshBlock *pmb);
 Real Measurements(MeshBlock *pmb, int iout);
 
@@ -83,6 +83,9 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   l_refine = pin->GetReal("problem", "l_refine");
   // Hydro parameters.
   dfloor = pin->GetReal("hydro", "Sigma_floor");
+  pfloor = pin->GetReal("hydro", "P_floor");
+  cs0 = pin->GetReal("hydro", "iso_sound_speed");
+  CS02 = SQR(cs0);
   // Secondary parameters.
   gm1 = pin->GetReal("problem", "GM_s");
   soft_sat = pin->GetReal("problem", "soft_sat");
@@ -91,7 +94,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   lambda = pin->GetReal("problem", "lambda");
   R0 = pin->GetReal("problem", "R0");
   Omega0 = pin->GetReal("problem", "Omega0");
-  CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
   nu_iso = pin->GetReal("problem", "nu_iso");
   // Boundary conditions.
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
@@ -146,32 +148,38 @@ Real splineKernel(Real x)
 
 /*
   These functions with "Prof" in their name are the unperturbed steady state (parameterized) background profiles.
+  Currently, only supports cs=const (lambda=0, temperature=constant, global isothermal).
 */
 
 Real DenProf(const Real rad)
 {
   // Density profile Sigma(r) (unperturbed)
-  return ovSig * (std::sqrt(x1max / rad) - 1);
+  // x1max and rad both in units R0
+  return ovSig;
 }
 
 Real dDenProfdr(const Real rad)
 {
   // Derivative of density profile d(Sigma(r))/dr (unperturbed)
-  return -ovSig * 0.5 * std::sqrt(x1max) / std::pow(rad, -1.5);
+  return 0;
 }
 
-Real csProf(const Real rad)
-{
-}
-
-Real dcsProfdr(const Real rad)
-{
-}
+// Currently unused
+// Real hProf(const Real rad)
+// {
+//   return (cs0/R0/Omega0)*std::pow((rad/R0),lambda+0.5);
+// }
 
 Real dPresProfdr(const Real rad){
-    return }
+    Real dSigdr = dDenProfdr(rad);
+    return std::pow(cs0,2)*dSigdr;
+}
 
-Real VelProf(const Real rad)
+Real RadVelProf(const Real rad){
+  return 3*nu_iso/(2*(rad*R0));
+}
+
+Real AzimVelProf(const Real rad)
 {
   // Velocity profile v(r)
   Real dPdr = dPresProfdr(rad);
@@ -273,7 +281,7 @@ Real Measurements(MeshBlock *pmb, int iout)
               momyEvaldir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
                             std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
 
-              // USES BAROTROPIC EOS
+              // USES BAROTROPIC GLOBAL ISOTHERMAL IDEAL GAS EOS
               // Force due to pressure.
               PxEvals[l] = (2 * PI) * rEval / nPtEval * std::cos(angEval) *
                            (-CS02 * Sig);
@@ -369,7 +377,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         rprim = x1;
         rsecn =
             std::sqrt(rprim * rprim + R0 * R0 - 2 * R0 * rprim * std::cos(x2));
-        vk = VelProf(rprim);
+        vk = AzimVelProf(rprim);
         Sig0 = DenProf(rprim);
         Sig = prim(IDN, k, j, i);
 
@@ -433,7 +441,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
 
         rprim = x1;
         Sig = DenProf(rprim);
-        vk = VelProf(rprim);
+        vk = AzimVelProf(rprim);
         vr0 = -1.5 * nu_iso / rprim;
 
         phydro->u(IDN, k, j, i) = Sig;
@@ -469,7 +477,7 @@ void Mesh::UserWorkInLoop()
             pmb->phydro->w(IVY, k, j, i) = 0;
             pmb->phydro->w(IVZ, k, j, i) = 0;
 
-            // USES BAROTROPIC EOS
+            // USES BAROTROPIC GLOBAL ISOTHERMAL IDEAL GAS EOS
             pmb->phydro->w(IDN, k, j, i) = sink_dens;
             pmb->phydro->w(IPR, k, j, i) = sink_dens * CS02;
 
@@ -554,7 +562,7 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 
         rprim = x1;
         Sig = DenProf(rprim);
-        vk = VelProf(rprim);
+        vk = AzimVelProf(rprim);
         vr = -1.5 * nu_iso / rprim;
 
         prim(IDN, k, j, iu + i) = Sig;
