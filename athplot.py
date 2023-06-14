@@ -352,6 +352,7 @@ class PpdCylAthhdf5(object):
 
         dens_data = np.array(dd["athena_pp", "dens"])
         vr_data = np.array(dd["athena_pp", "mom1"]) / dens_data
+        vphi_data = np.array(dd["athena_pp", "mom2"]) / dens_data
         coords = np.array(dd.fcoords)
         fwidths = np.array(dd.fwidth)
 
@@ -368,10 +369,13 @@ class PpdCylAthhdf5(object):
         GFyProf = np.zeros(Nr)
         GFx_rHexclProf = np.zeros(Nr)
         GFy_rHexclProf = np.zeros(Nr)
+        vrProf = np.zeros(Nr)
+        vphiProf = np.zeros(Nr) 
 
         for i in range(len(dens_data)):
             Sig = dens_data[i]
             vr = vr_data[i]
+            vphi = vphi_data[i]
             r = coords[i, 0]
             phi = coords[i, 1]
             for j in range(istart, iend):
@@ -389,6 +393,9 @@ class PpdCylAthhdf5(object):
                     GFxProf[j] += GdFx
                     GFyProf[j] += GdFy
 
+                    vrProf[j] += dA*vr
+                    vphiProf[j] += dA*vphi
+
                     dm = dA * Sig
                     dmDot = r * dphi * Sig * vr
                     mRing[j] += dm
@@ -399,9 +406,14 @@ class PpdCylAthhdf5(object):
                         GFy_rHexclProf[j] += GdFy
 
         SigProf = mRing / (2 * np.pi * midpts[:] * np.diff(edge_coords)[:])
+        vrProf = vrProf / (2 * np.pi * midpts[:] * np.diff(edge_coords)[:])
+        vphiProf = vphiProf / (2 * np.pi * midpts[:] * np.diff(edge_coords)[:])
+
         np.savez(
             self.outname,
             Sig=SigProf,
+            vr=vrProf,
+            vphi=vphiProf,
             Fx_g=GFxProf,
             Fy_g=GFyProf,
             Fx_g_rHexcl=GFx_rHexclProf,
