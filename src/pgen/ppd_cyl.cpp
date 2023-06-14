@@ -545,9 +545,9 @@ void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         //vk = AzimVelProf(rprim);
         //vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
-        prim(IDN, k, j, il - i) = prim(IDN, k, j, il)*std::pow((x1/r_active),-1);
-        prim(IVX, k, j, il - i) = prim(IVX, k, j, il)*std::pow((x1/r_active),0);
-        prim(IVY, k, j, il - i) = prim(IVY, k, j, il)*std::pow((x1/r_active),-0.5);
+        prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
+        prim(IVX, k, j, il - i) = prim(IVX, k, j, il);
+        prim(IVY, k, j, il - i) = prim(IVY, k, j, il);
         prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
         //vr = prim(IVX, k, j, il);
