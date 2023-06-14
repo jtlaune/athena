@@ -510,19 +510,19 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         // vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
         prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
-        // prim(IVX, k, j, il - i) = prim(IVX, k, j, il) * std::pow((x1 / r_active), -1);
+        prim(IVX, k, j, il - i) = prim(IVX, k, j, il);
         prim(IVY, k, j, il - i) = prim(IVY, k, j, il);
         prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
-        vr = prim(IVX, k, j, il);
-        if (vr <= 0)
-        {
-          prim(IVX, k, j, il - i) = vr;
-        }
-        else
-        {
-          prim(IVX, k, j, il - i) = 0;
-        }
+        //vr = prim(IVX, k, j, il);
+        //if (vr <= 0)
+        //{
+        //  prim(IVX, k, j, il - i) = vr;
+        //}
+        //else
+        //{
+        //  prim(IVX, k, j, il - i) = 0;
+        //}
       }
     }
   }
