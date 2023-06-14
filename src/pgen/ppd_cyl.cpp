@@ -44,7 +44,6 @@ Real AzimVelProf(const Real rad);
 Real RadVelProf(const Real rad);
 Real dPresProfdr(const Real rad);
 // Real hProf(const Real rad);
-int RefinementCondition(MeshBlock *pmb);
 Real Measurements(MeshBlock *pmb, int iout);
 
 // User source function
@@ -54,7 +53,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar);
 // User-defined boundary conditions for disk simulations
-void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                      FaceField &b, Real time, Real dt, int il, int iu, int jl,
                      int ju, int kl, int ku, int ngh);
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
@@ -63,17 +62,9 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 Real splineKernel(Real x);
 // void MeshBlock::UserWorkInLoop();
 
-void AccDiskViscCoeff(HydroDiffusion *phdif, MeshBlock *pmb, const AthenaArray<Real> &prim,
-                      const AthenaArray<Real> &bcc, int is, int ie, int js, int je,
-                      int ks, int ke);
-
 void Mesh::InitUserMeshData(ParameterInput *pin)
 {
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
-  if (adaptive == true)
-  {
-    EnrollUserRefinementCondition(RefinementCondition);
-  }
   AllocateUserHistoryOutput(7);
   EnrollUserHistoryOutput(0, Measurements, "Fx_pressure");
   EnrollUserHistoryOutput(1, Measurements, "Fy_pressure");
@@ -116,13 +107,12 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   // Enroll user-defined boundary condition.
   if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user"))
   {
-    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiodeOutInnerX1);
+    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
   }
   if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user"))
   {
     EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
   }
-  EnrollViscosityCoefficient(AccDiskViscCoeff);
   return;
 }
 
@@ -160,20 +150,14 @@ Real DenProf(const Real rad)
 {
   // Density profile Sigma(r) (unperturbed)
   // x1max and rad both in units R0
-  return ovSig * (R0 / rad);
+  return ovSig;
 }
 
 Real dDenProfdr(const Real rad)
 {
   // Derivative of density profile d(Sigma(r))/dr (unperturbed)
-  return -ovSig * R0 / rad / rad;
+  return 0;
 }
-
-// Currently unused
-// Real hProf(const Real rad)
-// {
-//   return (cs0/R0/Omega0)*std::pow((rad/R0),lambda+0.5);
-// }
 
 Real dPresProfdr(const Real rad)
 {
@@ -183,7 +167,7 @@ Real dPresProfdr(const Real rad)
 
 Real RadVelProf(const Real rad)
 {
-  return -3 * nu_iso / 2;
+  return -3 * nu_iso / 2 / (rad / R0);
 }
 
 Real AzimVelProf(const Real rad)
@@ -191,7 +175,7 @@ Real AzimVelProf(const Real rad)
   // Velocity profile v(r)
   Real dPdr = dPresProfdr(rad);
   Real Sig = DenProf(rad);
-  return std::sqrt(dPdr*rad/Sig + 1 / rad) - Omega0 * rad;
+  return std::sqrt(dPdr * rad / Sig + 1 / rad) - Omega0 * rad;
 }
 
 Real Measurements(MeshBlock *pmb, int iout)
@@ -503,27 +487,7 @@ void Mesh::UserWorkInLoop()
   return;
 }
 
-int RefinementCondition(MeshBlock *pmb)
-{
-  Real x1min = pmb->pcoord->x1v(pmb->is);
-  Real x1max = pmb->pcoord->x1v(pmb->ie);
-  Real x2min = pmb->pcoord->x2v(pmb->js);
-  Real x2max = pmb->pcoord->x2v(pmb->je);
-  Real cond = 0;
-  if ((x1min < (R0 + l_refine)) and (x1max > (R0 - l_refine)))
-  {
-    // radial band
-    if ((x2min < 2 * PI * l_refine / R0) and
-        (x2max > -2 * PI * l_refine / R0))
-    {
-      // azimuthal band
-      cond = 1;
-    }
-  }
-  return (cond);
-}
-
-void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                      FaceField &b, Real time, Real dt, int il, int iu, int jl,
                      int ju, int kl, int ku, int ngh)
 {
@@ -540,29 +504,33 @@ void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       {
         x1 = pco->x1v(il - i);
 
-        //rprim = x1;
-        //Sig = DenProf(rprim);
-        //vk = AzimVelProf(rprim);
-        //vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+        // rprim = x1;
+        // Sig = DenProf(rprim);
+        // vk = AzimVelProf(rprim);
+        // vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
-        prim(IDN, k, j, il - i) = prim(IDN, k, j, il)*std::pow((x1/r_active),-1);
-        prim(IVX, k, j, il - i) = prim(IVX, k, j, il)*std::pow((x1/r_active),0);
-        prim(IVY, k, j, il - i) = prim(IVY, k, j, il)*std::pow((x1/r_active),-0.5);
+        prim(IDN, k, j, il - i) = prim(IDN, k, j, il) * std::pow((x1 / r_active), 0);
+        prim(IVX, k, j, il - i) = prim(IVX, k, j, il) * std::pow((x1 / r_active), -1);
+        prim(IVY, k, j, il - i) = prim(IVY, k, j, il) * std::pow((x1 / r_active), -0.5);
         prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
-        //vr = prim(IVX, k, j, il);
-        //if (vr <= 0)
+        // vr = prim(IVX, k, j, il);
+        // if (vr <= 0)
         //{
-        //  prim(IVX, k, j, il - i) = vr;
-        //}
-        //else
+        //   prim(IVX, k, j, il - i) = vr;
+        // }
+        // else
         //{
-        //  prim(IVX, k, j, il - i) = 0;
-        //}
+        //   prim(IVX, k, j, il - i) = 0;
+        // }
       }
     }
   }
 }
+
+/*
+  Set to initial conditions (wave damping is in disk source)
+*/
 
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
@@ -591,26 +559,4 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       }
     }
   }
-}
-
-void AccDiskViscCoeff(HydroDiffusion *phdif, MeshBlock *pmb, const AthenaArray<Real> &prim,
-                      const AthenaArray<Real> &bcc, int is, int ie, int js, int je,
-                      int ks, int ke)
-{
-  Real x1;
-  if (nu_iso > 0.0)
-  {
-    for (int k = ks; k <= ke; ++k)
-    {
-      for (int j = js; j <= je; ++j)
-      {
-        for (int i = is; i <= ie; ++i)
-        {
-          x1 = pmb->pcoord->x1v(i);
-          phdif->nu(HydroDiffusion::DiffProcess::iso, k, j, i) = nu_iso * (x1 / R0);
-        }
-      }
-    }
-  }
-    return;
 }
