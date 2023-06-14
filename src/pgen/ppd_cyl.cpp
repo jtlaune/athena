@@ -54,8 +54,8 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         AthenaArray<Real> &cons_scalar);
 // User-defined boundary conditions for disk simulations
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                     FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                     int ju, int kl, int ku, int ngh);
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh);
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh);
@@ -488,8 +488,8 @@ void Mesh::UserWorkInLoop()
 }
 
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                     FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                     int ju, int kl, int ku, int ngh)
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh)
 {
   Real x1, x2, x3;
   Real vr;
@@ -509,20 +509,20 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         // vk = AzimVelProf(rprim);
         // vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
-        prim(IDN, k, j, il - i) = prim(IDN, k, j, il) * std::pow((x1 / r_active), 0);
-        prim(IVX, k, j, il - i) = prim(IVX, k, j, il) * std::pow((x1 / r_active), -1);
-        prim(IVY, k, j, il - i) = prim(IVY, k, j, il) * std::pow((x1 / r_active), -0.5);
+        prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
+        // prim(IVX, k, j, il - i) = prim(IVX, k, j, il) * std::pow((x1 / r_active), -1);
+        prim(IVY, k, j, il - i) = prim(IVY, k, j, il);
         prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
-        // vr = prim(IVX, k, j, il);
-        // if (vr <= 0)
-        //{
-        //   prim(IVX, k, j, il - i) = vr;
-        // }
-        // else
-        //{
-        //   prim(IVX, k, j, il - i) = 0;
-        // }
+        vr = prim(IVX, k, j, il);
+        if (vr <= 0)
+        {
+          prim(IVX, k, j, il - i) = vr;
+        }
+        else
+        {
+          prim(IVX, k, j, il - i) = 0;
+        }
       }
     }
   }
