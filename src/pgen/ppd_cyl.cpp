@@ -63,6 +63,10 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 Real splineKernel(Real x);
 // void MeshBlock::UserWorkInLoop();
 
+void AccDiskViscCoeff(HydroDiffusion *phdif, MeshBlock *pmb, const AthenaArray<Real> &prim,
+                      const AthenaArray<Real> &bcc, int is, int ie, int js, int je,
+                      int ks, int ke);
+
 void Mesh::InitUserMeshData(ParameterInput *pin)
 {
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
@@ -118,6 +122,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   {
     EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
   }
+  EnrollViscosityCoefficient(AccDiskViscCoeff);
   return;
 }
 
@@ -155,13 +160,13 @@ Real DenProf(const Real rad)
 {
   // Density profile Sigma(r) (unperturbed)
   // x1max and rad both in units R0
-  return ovSig;
+  return ovSig * (R0 / rad);
 }
 
 Real dDenProfdr(const Real rad)
 {
   // Derivative of density profile d(Sigma(r))/dr (unperturbed)
-  return 0;
+  return -ovSig * R0 / rad / rad;
 }
 
 // Currently unused
@@ -170,20 +175,23 @@ Real dDenProfdr(const Real rad)
 //   return (cs0/R0/Omega0)*std::pow((rad/R0),lambda+0.5);
 // }
 
-Real dPresProfdr(const Real rad){
-    Real dSigdr = dDenProfdr(rad);
-    return std::pow(cs0,2)*dSigdr;
+Real dPresProfdr(const Real rad)
+{
+  Real dSigdr = dDenProfdr(rad);
+  return std::pow(cs0, 2) * dSigdr;
 }
 
-Real RadVelProf(const Real rad){
-  return -3*nu_iso/(2*(rad*R0));
+Real RadVelProf(const Real rad)
+{
+  return -3 * nu_iso / 2;
 }
 
 Real AzimVelProf(const Real rad)
 {
   // Velocity profile v(r)
   Real dPdr = dPresProfdr(rad);
-  return std::sqrt(dPdr + 1 / rad) - Omega0 * rad;
+  Real Sig = DenProf(rad);
+  return std::sqrt(dPdr*rad/Sig + 1 / rad) - Omega0 * rad;
 }
 
 Real Measurements(MeshBlock *pmb, int iout)
@@ -411,7 +419,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         {
           Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
           Real factor = splineKernel(x);
-          vr0 = RadVelProf(rprim);//-1.5 * nu_iso / rprim;
+          vr0 = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
           cons(IM1, k, j, i) +=
@@ -442,7 +450,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
         rprim = x1;
         Sig = DenProf(rprim);
         vk = AzimVelProf(rprim);
-        vr0 = RadVelProf(rprim);//-1.5 * nu_iso / rprim;
+        vr0 = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
         phydro->u(IDN, k, j, i) = Sig;
         phydro->u(IM1, k, j, i) = Sig * vr0;
@@ -519,17 +527,27 @@ void DiodeOutInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                      FaceField &b, Real time, Real dt, int il, int iu, int jl,
                      int ju, int kl, int ku, int ngh)
 {
+  Real x1, x2, x3;
   Real vr;
+  Real r_active = pco->x1v(il);
   for (int k = kl; k <= ku; ++k)
   {
+    x3 = pco->x3v(k);
     for (int j = jl; j <= ju; ++j)
     {
+      x2 = pco->x2v(j);
       for (int i = 1; i <= ngh; ++i)
       {
+        x1 = pco->x1v(il - i);
 
-        prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
-        prim(IVX, k, j, il - i) = prim(IVX, k, j, il);
-        prim(IVY, k, j, il - i) = prim(IVY, k, j, il);
+        //rprim = x1;
+        //Sig = DenProf(rprim);
+        //vk = AzimVelProf(rprim);
+        //vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+
+        prim(IDN, k, j, il - i) = prim(IDN, k, j, il)*std::pow((x1/r_active),-1);
+        prim(IVX, k, j, il - i) = prim(IVX, k, j, il)*std::pow((x1/r_active),0);
+        prim(IVY, k, j, il - i) = prim(IVY, k, j, il)*std::pow((x1/r_active),-0.5);
         prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
 
         //vr = prim(IVX, k, j, il);
@@ -564,7 +582,7 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         rprim = x1;
         Sig = DenProf(rprim);
         vk = AzimVelProf(rprim);
-        vr = RadVelProf(rprim);//-1.5 * nu_iso / rprim;
+        vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
         prim(IDN, k, j, iu + i) = Sig;
         prim(IVX, k, j, iu + i) = vr;
@@ -573,4 +591,26 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       }
     }
   }
+}
+
+void AccDiskViscCoeff(HydroDiffusion *phdif, MeshBlock *pmb, const AthenaArray<Real> &prim,
+                      const AthenaArray<Real> &bcc, int is, int ie, int js, int je,
+                      int ks, int ke)
+{
+  Real x1;
+  if (nu_iso > 0.0)
+  {
+    for (int k = ks; k <= ke; ++k)
+    {
+      for (int j = js; j <= je; ++j)
+      {
+        for (int i = is; i <= ie; ++i)
+        {
+          x1 = pmb->pcoord->x1v(i);
+          phdif->nu(HydroDiffusion::DiffProcess::iso, k, j, i) = nu_iso * (x1 / R0);
+        }
+      }
+    }
+  }
+    return;
 }
