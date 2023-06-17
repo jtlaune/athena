@@ -104,15 +104,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   // Calculation parameters.
   r_exclude = pin->GetOrAddReal("problem", "gforce_r_exclude", 0);
 
-  // Enroll user-defined boundary condition.
-  if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user"))
-  {
-    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
-  }
-  if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user"))
-  {
-    EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
-  }
+  EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
+  EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
   return;
 }
 
@@ -492,7 +485,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  int ju, int kl, int ku, int ngh)
 {
   Real x1, x2, x3;
-  Real vr;
+  Real rprim, Sig, vk, vr;
   Real r_active = pco->x1v(il);
   for (int k = kl; k <= ku; ++k)
   {
@@ -504,25 +497,15 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       {
         x1 = pco->x1v(il - i);
 
-        // rprim = x1;
-        // Sig = DenProf(rprim);
-        // vk = AzimVelProf(rprim);
-        // vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+        rprim = x1;
+        Sig = DenProf(rprim);
+        vk = AzimVelProf(rprim);
+        vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
-        prim(IDN, k, j, il - i) = prim(IDN, k, j, il);
-        // prim(IVX, k, j, il - i) = prim(IVX, k, j, il) * std::pow((x1 / r_active), -1);
-        prim(IVY, k, j, il - i) = prim(IVY, k, j, il);
-        prim(IVZ, k, j, il - i) = prim(IVZ, k, j, il);
-
-        vr = prim(IVX, k, j, il);
-        if (vr <= 0)
-        {
-          prim(IVX, k, j, il - i) = vr;
-        }
-        else
-        {
-          prim(IVX, k, j, il - i) = 0;
-        }
+        prim(IDN, k, j, il - i) = Sig;//prim(IDN, k, j, il);
+        prim(IVX, k, j, il - i) = vr; //prim(IVX, k, j, il); // * std::pow((x1 / r_active), -1);
+        prim(IVY, k, j, il - i) = vk; //prim(IVY, k, j, il); // * std::pow((x1 / r_active), -0.5);
+        prim(IVZ, k, j, il - i) = 0.; //prim(IVZ, k, j, il);
       }
     }
   }
@@ -537,6 +520,7 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  int ju, int kl, int ku, int ngh)
 {
   Real Sig, vk, rprim, x1, x2, x3, Cx, Cy, vr;
+  Real r_active = pco->x1v(iu);
   for (int k = kl; k <= ku; ++k)
   {
     x3 = pco->x3v(k);
@@ -553,8 +537,8 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
         prim(IDN, k, j, iu + i) = Sig;
-        prim(IVX, k, j, iu + i) = vr;
-        prim(IVY, k, j, iu + i) = vk;
+        prim(IVX, k, j, iu + i) = vr; // * std::pow((x1 / r_active), -1);
+        prim(IVY, k, j, iu + i) = vk; // * std::pow((x1 / r_active), -0.5);
         prim(IVZ, k, j, iu + i) = 0.;
       }
     }
