@@ -33,12 +33,13 @@
 namespace {
 Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
 Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
-Real rSink, rEval, sink_dens, r_exclude;
+Real rSink, rEval, sink_dens, r_exclude, nu_iso;
 int nPtEval;
 } // namespace
 
 Real DenProf(const Real rad);
 Real VelProf(const Real rad);
+Real RadVelProf(const Real rad);
 int RefinementCondition(MeshBlock *pmb);
 Real Measurements(MeshBlock *pmb, int iout);
 
@@ -76,6 +77,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   l_refine = pin->GetReal("problem", "l_refine");
   // Hydro parameters.
   dfloor = pin->GetReal("hydro", "Sigma_floor");
+  nu_iso = pin->GetReal("problem", "nu_iso");
   // Secondary parameters.
   gm1 = pin->GetReal("problem", "GM_s");
   soft_sat = pin->GetReal("problem", "soft_sat");
@@ -135,6 +137,11 @@ Real DenProf(const Real rad) {
 Real VelProf(const Real rad) {
   // Velocity profile v(r)
   return std::sqrt(dslope * CS02 + 1 / rad) - Omega0 * rad;
+}
+
+Real RadVelProf(const Real rad) {
+  // Velocity profile v(r)
+  return -3*nu_iso/(2*rad);
 }
 
 Real Measurements(MeshBlock *pmb, int iout) {
@@ -283,7 +290,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &prim_scalar,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar) {
-  Real vk, vr, vth, Sig, Sig0, rprim, rsecn;
+  Real vk, vr, vr0, vth, Sig, Sig0, rprim, rsecn;
   Real x1, x2, x3;
   Real Fpr, Cs;
   for (int k = pmb->ks; k <= pmb->ke; ++k) {
@@ -299,6 +306,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         vk = VelProf(rprim);
         Sig0 = DenProf(rprim);
         Sig = prim(IDN, k, j, i);
+        vr0 = RadVelProf(rprim);
 
         // Primary gravity.
         // No softening because it is off-grid.
@@ -331,7 +339,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
           Real factor = splineKernel(x);
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_in;
-          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i)) / T_damp_in;
+          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_in;
           cons(IM2, k, j, i) +=
               -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_in;
         }
@@ -341,7 +349,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
           cons(IM1, k, j, i) +=
-              -factor * dt * (cons(IM1, k, j, i)) / T_damp_bdy;
+              -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_bdy;
           cons(IM2, k, j, i) +=
               -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_bdy;
         }
@@ -352,7 +360,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 
 void MeshBlock::ProblemGenerator(ParameterInput *pin) {
   Real x1, x2, x3;
-  Real Sig, vk, Cx, Cy;
+  Real Sig, vk, vr0, Cx, Cy;
   Real rprim;
   for (int k = ks; k <= ke; ++k) {
     x3 = pcoord->x3v(k);
@@ -364,9 +372,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         rprim = x1;
         Sig = DenProf(rprim);
         vk = VelProf(rprim);
+        vr0 = RadVelProf(rprim);
 
         phydro->u(IDN, k, j, i) = Sig;
-        phydro->u(IM1, k, j, i) = 0.;
+        phydro->u(IM1, k, j, i) = Sig * vr0;
         phydro->u(IM2, k, j, i) = Sig * vk;
         phydro->u(IM3, k, j, i) = 0.;
       }
@@ -430,7 +439,7 @@ int RefinementCondition(MeshBlock *pmb) {
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh) {
-  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
+  Real Sig, vk, vr0, rprim, x1, x2, x3, Cx, Cy;
   for (int k = kl; k <= ku; ++k) {
     x3 = pco->x3v(k);
     for (int j = jl; j <= ju; ++j) {
@@ -441,9 +450,10 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         rprim = x1;
         Sig = DenProf(rprim);
         vk = VelProf(rprim);
+        vr0 = RadVelProf(rprim);
 
         prim(IDN, k, j, il - i) = Sig;
-        prim(IM1, k, j, il - i) = 0.;
+        prim(IM1, k, j, il - i) = vr0;
         prim(IM2, k, j, il - i) = vk;
         prim(IM3, k, j, il - i) = 0.;
       }
@@ -454,7 +464,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh) {
-  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy;
+  Real Sig, vk, vr0, rprim, x1, x2, x3, Cx, Cy;
   for (int k = kl; k <= ku; ++k) {
     x3 = pco->x3v(k);
     for (int j = jl; j <= ju; ++j) {
@@ -465,9 +475,10 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         rprim = x1;
         Sig = DenProf(rprim);
         vk = VelProf(rprim);
+        vr0 = RadVelProf(rprim);
 
         prim(IDN, k, j, iu + i) = Sig;
-        prim(IM1, k, j, iu + i) = 0.;
+        prim(IM1, k, j, iu + i) = vr0;
         prim(IM2, k, j, iu + i) = vk;
         prim(IM3, k, j, iu + i) = 0.;
       }
