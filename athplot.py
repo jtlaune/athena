@@ -399,7 +399,7 @@ class PpdCylAthhdf5(object):
                     dm = dA * Sig
                     dmDot = r * dphi * Sig * vr
                     mRing[j] += dm
-                    mDotRing[j] = dmDot
+                    mDotRing[j] += dmDot
 
                     if np.sqrt((x - 1.0) ** 2 + (y) ** 2) > rH:
                         GFx_rHexclProf[j] += GdFx
