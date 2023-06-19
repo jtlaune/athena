@@ -508,7 +508,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         if (vr >= 0) {
           prim(IVX, k, j, il - i) = 0;
         } else {
-          prim(IVX, k, j, il - i) = vr * std::pow((x1 / r_active), -1);
+          prim(IVX, k, j, il - i) = vr;
         }
         // dumb debugging for nlim=1, dcycle=1
         //if (i == 1)
