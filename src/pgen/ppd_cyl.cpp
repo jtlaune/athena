@@ -498,14 +498,30 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         x1 = pco->x1v(il - i);
 
         rprim = x1;
-        Sig = DenProf(rprim);
-        vk = AzimVelProf(rprim);
-        vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+        Sig = prim(IDN, k, j, il); // DenProf(rprim);
+        vr = prim(IVX, k, j, il);  // RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+        vk = prim(IVY, k, j, il);  // AzimVelProf(rprim);
 
-        prim(IDN, k, j, il - i) = Sig;//prim(IDN, k, j, il);
-        prim(IVX, k, j, il - i) = vr; //prim(IVX, k, j, il); // * std::pow((x1 / r_active), -1);
-        prim(IVY, k, j, il - i) = vk; //prim(IVY, k, j, il); // * std::pow((x1 / r_active), -0.5);
-        prim(IVZ, k, j, il - i) = 0.; //prim(IVZ, k, j, il);
+        prim(IDN, k, j, il - i) = Sig; // prim(IDN, k, j, il);
+        prim(IVY, k, j, il - i) = (vk + r_active * Omega0) * std::pow((x1 / r_active), -0.5) - rprim * Omega0;
+        prim(IVZ, k, j, il - i) = 0.; // prim(IVZ, k, j, il);
+        if (vr >= 0) {
+          prim(IVX, k, j, il - i) = 0;
+        } else {
+          prim(IVX, k, j, il - i) = vr * std::pow((x1 / r_active), -1);
+        }
+        // dumb debugging for nlim=1, dcycle=1
+        //if (i == 1)
+        //{
+        //  std::cout << rprim << "\n";
+        //  std::cout << r_active << "\n";
+        //  std::cout << prim(IDN, k, j, il - i) << "\n";
+        //  std::cout << prim(IVX, k, j, il - i) << "\n";
+        //  std::cout << prim(IVY, k, j, il) << "\n";
+        //  std::cout << prim(IVY, k, j, il - i) << "\n";
+        //  std::cout << "--------end step--------"
+        //            << "\n";
+        //}
       }
     }
   }
@@ -532,13 +548,13 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         x1 = pco->x1v(iu + i);
 
         rprim = x1;
-        Sig = DenProf(rprim);
-        vk = AzimVelProf(rprim);
-        vr = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+        Sig = prim(IDN, k, j, iu); // DenProf(rprim);
+        vr = prim(IVX, k, j, iu);  // RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+        vk = prim(IVY, k, j, iu);  // AzimVelProf(rprim);
 
         prim(IDN, k, j, iu + i) = Sig;
-        prim(IVX, k, j, iu + i) = vr; // * std::pow((x1 / r_active), -1);
-        prim(IVY, k, j, iu + i) = vk; // * std::pow((x1 / r_active), -0.5);
+        prim(IVX, k, j, iu + i) = vr * std::pow((x1 / r_active), -1);
+        prim(IVY, k, j, iu + i) = (vk + r_active * Omega0) * std::pow((x1 / r_active), -0.5) - rprim * Omega0;
         prim(IVZ, k, j, iu + i) = 0.;
       }
     }
