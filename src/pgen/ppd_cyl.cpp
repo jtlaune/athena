@@ -32,9 +32,9 @@
 
 namespace
 {
-  Real gm1, ovSig, lambda, dfloor, pfloor, R0, cs0, CS02, Omega0, soft_sat, nu_iso;
-  Real T_damp_bdy, WDL1, WDL2, x1min, x1max, l_refine;
-  Real rSink, rEval, sink_dens, r_exclude;
+  Real gm1, ovSig, lambda, dfloor, pfloor, R0, cs0, CS02, Omega0, nu_iso;
+  Real T_damp_bdy, WDL1, WDL2, x1min, x1max;
+  Real r_exclude, innerbdy;
   int nPtEval;
 } // namespace
 
@@ -44,7 +44,6 @@ Real AzimVelProf(const Real rad);
 Real RadVelProf(const Real rad);
 Real dPresProfdr(const Real rad);
 // Real hProf(const Real rad);
-Real Measurements(MeshBlock *pmb, int iout);
 
 // User source function
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
@@ -65,17 +64,7 @@ Real splineKernel(Real x);
 void Mesh::InitUserMeshData(ParameterInput *pin)
 {
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
-  AllocateUserHistoryOutput(7);
-  EnrollUserHistoryOutput(0, Measurements, "Fx_pressure");
-  EnrollUserHistoryOutput(1, Measurements, "Fy_pressure");
-  EnrollUserHistoryOutput(2, Measurements, "Fs,grav_x=r");
-  EnrollUserHistoryOutput(3, Measurements, "Fs,grav_y=th");
-  EnrollUserHistoryOutput(4, Measurements, "AccretionEval");
-  EnrollUserHistoryOutput(5, Measurements, "momxAccretion");
-  EnrollUserHistoryOutput(6, Measurements, "momyAccretion");
 
-  // AMR parameters (not used if SMR).
-  l_refine = pin->GetReal("problem", "l_refine");
   // Hydro parameters.
   dfloor = pin->GetReal("hydro", "Sigma_floor");
   pfloor = pin->GetReal("hydro", "P_floor");
@@ -83,7 +72,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   CS02 = SQR(cs0);
   // Secondary parameters.
   gm1 = pin->GetReal("problem", "GM_s");
-  soft_sat = pin->GetReal("problem", "soft_sat");
   // Disk parameters.
   ovSig = pin->GetReal("problem", "overlineSigma");
   lambda = pin->GetReal("problem", "lambda");
@@ -96,11 +84,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   x1min = pin->GetReal("mesh", "x1min");
   x1max = pin->GetReal("mesh", "x1max");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
+  innerbdy = pin->GetReal("problem", "innerbdy");
   // Sink parameters.
-  rSink = pin->GetReal("problem", "sink_radius");
-  rEval = pin->GetReal("problem", "eval_radius");
-  nPtEval = pin->GetReal("problem", "N_eval_pts");
-  sink_dens = pin->GetReal("problem", "sink_dens");
   // Calculation parameters.
   r_exclude = pin->GetOrAddReal("problem", "gforce_r_exclude", 0);
 
@@ -171,175 +156,6 @@ Real AzimVelProf(const Real rad)
   return std::sqrt(dPdr * rad / Sig + 1 / rad) - Omega0 * rad;
 }
 
-Real Measurements(MeshBlock *pmb, int iout)
-{
-  // User-defined history function. Must calculate a sum of values
-  // within each MeshBlock & athena turns it into a global sum automatically.
-  Real F_x = 0, F_y = 0, Sig, x1, x2, x3;
-  Real rs, vol, Fmag, rsecn, rsoft;
-  int is = pmb->is, ie = pmb->ie, js = pmb->js, je = pmb->je, ks = pmb->ks,
-      ke = pmb->ke;
-  Real momxEvaldir, momyEvaldir, angEval, xEval, yEval;
-  Real rf1, rf2, thf1, thf2;
-  Real rpeval, theval;
-  Real AccRate = 0;
-  Real momxRate = 0;
-  Real momyRate = 0;
-  Real PxForce = 0;
-  Real PyForce = 0;
-  bool InsideCell;
-
-  Real FxEvals[nPtEval];
-  Real FyEvals[nPtEval];
-  Real mDotEvalVals[nPtEval];
-  Real PxEvals[nPtEval];
-  Real PyEvals[nPtEval];
-
-  for (int l = 0; l <= nPtEval; l++)
-  {
-    mDotEvalVals[l] = 0;
-    FxEvals[l] = 0;
-    FyEvals[l] = 0;
-    PxEvals[l] = 0;
-    PyEvals[l] = 0;
-  }
-
-  for (int k = ks; k <= ke; k++)
-  {
-    x3 = pmb->pcoord->x3v(k);
-    for (int j = js; j <= je; j++)
-    {
-      x2 = pmb->pcoord->x2v(j);
-      for (int i = is; i <= ie; i++)
-      {
-        x1 = pmb->pcoord->x1v(i);
-
-        Sig = pmb->phydro->u(IDN, k, j, i);
-        vol = pmb->pcoord->GetCellVolume(k, j, i);
-
-        rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
-        rsoft = std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
-
-        if (rsecn > r_exclude)
-        {
-          Fmag = gm1 / rsoft / rsoft / rsoft;
-          // Fmag = gm1/rsecn/rsecn/rsecn;
-          F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
-          F_y += Sig * vol * Fmag * x1 * std::sin(x2);
-        }
-
-        // For now, doing nearest neighbor.
-        if (rsecn < 2 * rEval)
-        { // only do eval if we are near the sink
-          for (int l = 0; l <= nPtEval; l++)
-          {
-            angEval = 2 * PI / nPtEval * l;
-
-            // sample locus of circle at secondary with radius rEval
-            xEval = rEval * std::cos(angEval) + R0;
-            yEval = rEval * std::sin(angEval);
-
-            rf1 = pmb->pcoord->x1f(i);
-            rf2 = pmb->pcoord->x1f(i + 1);
-            thf1 = pmb->pcoord->x2f(j);
-            thf2 = pmb->pcoord->x2f(j + 1);
-
-            InsideCell = false;
-            rpeval = sqrt(xEval * xEval + yEval * yEval);
-            theval = std::atan2(yEval, xEval);
-
-            if ((rf1 <= rpeval) && (rpeval < rf2))
-            {
-              if ((thf1 <= theval) && (theval < thf2))
-              {
-                InsideCell = true;
-              }
-            }
-
-            if (InsideCell)
-            {
-              // Go from polar -> local cartesian.
-              // Because x2<<1 near the sink, this should not be a huge
-              // adjustment.
-              momxEvaldir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
-                            std::sin(x2) * (pmb->phydro->u(IM2, k, j, i));
-              momyEvaldir = std::sin(x2) * (pmb->phydro->u(IM1, k, j, i)) +
-                            std::cos(x2) * (pmb->phydro->u(IM2, k, j, i));
-
-              // USES BAROTROPIC GLOBAL ISOTHERMAL IDEAL GAS EOS
-              // Force due to pressure.
-              PxEvals[l] = (2 * PI) * rEval / nPtEval * std::cos(angEval) *
-                           (-CS02 * Sig);
-              PyEvals[l] = (2 * PI) * rEval / nPtEval * std::sin(angEval) *
-                           (-CS02 * Sig);
-
-              // Force from accreted momentum
-              FxEvals[l] = -((2 * PI) * rEval / nPtEval / Sig) *
-                           (momxEvaldir * momxEvaldir * std::cos(angEval) +
-                            momxEvaldir * momyEvaldir * std::cos(angEval));
-              FyEvals[l] = -((2 * PI) * rEval / nPtEval / Sig) *
-                           (momyEvaldir * momxEvaldir * std::cos(angEval) +
-                            momyEvaldir * momyEvaldir * std::cos(angEval));
-
-              // Accretion rate
-              mDotEvalVals[l] = -((2 * PI) / nPtEval) * rEval *
-                                ((momxEvaldir) * (std::cos(angEval)) +
-                                 (momyEvaldir) * (std::sin(angEval)));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  for (int l = 0; l <= nPtEval; l++)
-  {
-    // evalVals[l] being different from its initialized value means it was
-    // altered in this meshblock.
-    if (mDotEvalVals[l] != 0)
-    {
-      PxForce += PxEvals[l];
-      PyForce += PyEvals[l];
-      momxRate += FxEvals[l];
-      momyRate += FyEvals[l];
-      AccRate += mDotEvalVals[l];
-    }
-  }
-
-  if (iout == 0)
-  {
-    return PxForce;
-  }
-  else if (iout == 1)
-  {
-    return PyForce;
-  }
-  else if (iout == 2)
-  {
-    return F_x;
-  }
-  else if (iout == 3)
-  {
-    return F_y;
-  }
-  else if (iout == 4)
-  {
-    return AccRate;
-  }
-  else if (iout == 5)
-  {
-    return momxRate;
-  }
-  else if (iout == 6)
-  {
-    return momyRate;
-  }
-  else
-  {
-    return 0.;
-  }
-}
-
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &prim,
                         const AthenaArray<Real> &prim_scalar,
@@ -381,17 +197,17 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM1, k, j, i) += 2 * dt * Sig * Omega0 * vth;
         cons(IM2, k, j, i) += -2 * dt * Sig * Omega0 * vr;
 
-        // Satellite gravity, softened by soft_sat.
-        Cs = gm1 / (rsecn * rsecn + soft_sat * soft_sat) /
-             std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
-        cons(IM1, k, j, i) += Sig * dt * Cs * (std::cos(x2) * R0 - x1);
-        cons(IM2, k, j, i) += -Sig * dt * Cs * R0 * std::sin(x2);
-
-        // Indirect terms arising from primary acceleration in +x direction.
-        cons(IM1, k, j, i) += -gm1 * dt * Sig * std::cos(x2) / (R0 * R0);
-        cons(IM2, k, j, i) += +gm1 * dt * Sig * std::sin(x2) / (R0 * R0);
-
         // Wave damping regions.
+        if ((rprim <= innerbdy) and (innerbdy != x1min))
+        {
+          Real x = (rprim - x1min) / (innerbdy - x1min);
+          Real factor = splineKernel(x);
+          cons(IDN, k, j, i) +=
+              -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
+          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_bdy;
+          cons(IM2, k, j, i) +=
+              -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_bdy;
+        }
         if ((rprim >= WDL1) and (WDL2 != WDL1))
         {
           Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
@@ -438,48 +254,6 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
   }
 }
 
-void Mesh::UserWorkInLoop()
-{
-  Real rsecn, x1, x2, x3;
-  for (int bn = 0; bn < nblocal; ++bn)
-  {
-    MeshBlock *pmb = my_blocks(bn);
-    // LogicalLocation &loc = pmb->loc;
-    // if (loc.level == nLevel) { // lowest level
-    for (int k = pmb->ks; k <= pmb->ke; k++)
-    {
-      x3 = pmb->pcoord->x3v(k);
-      for (int j = pmb->js; j <= pmb->je; j++)
-      {
-        x2 = pmb->pcoord->x2v(j);
-        for (int i = pmb->is; i <= pmb->ie; i++)
-        {
-          x1 = pmb->pcoord->x1v(i);
-          rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
-          if (rsecn < rSink)
-          {
-            pmb->phydro->w(IVX, k, j, i) = 0;
-            pmb->phydro->w(IVY, k, j, i) = 0;
-            pmb->phydro->w(IVZ, k, j, i) = 0;
-
-            // USES BAROTROPIC GLOBAL ISOTHERMAL IDEAL GAS EOS
-            pmb->phydro->w(IDN, k, j, i) = sink_dens;
-            pmb->phydro->w(IPR, k, j, i) = sink_dens * CS02;
-
-            pmb->phydro->u(IDN, k, j, i) = sink_dens;
-            pmb->phydro->u(IM1, k, j, i) = 0;
-            pmb->phydro->u(IM2, k, j, i) = 0;
-            pmb->phydro->u(IM3, k, j, i) = 0;
-            pmb->phydro->u(IDN, k, j, i) = sink_dens;
-          }
-        }
-      }
-    }
-    //}
-  }
-  return;
-}
-
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh)
@@ -505,13 +279,16 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         prim(IDN, k, j, il - i) = Sig; // prim(IDN, k, j, il);
         prim(IVY, k, j, il - i) = (vk + r_active * Omega0) * std::pow((x1 / r_active), -0.5) - rprim * Omega0;
         prim(IVZ, k, j, il - i) = 0.; // prim(IVZ, k, j, il);
-        if (vr >= 0) {
+        if (vr >= 0)
+        {
           prim(IVX, k, j, il - i) = 0;
-        } else {
+        }
+        else
+        {
           prim(IVX, k, j, il - i) = vr * std::pow((x1 / r_active), -1);
         }
         // dumb debugging for nlim=1, dcycle=1
-        //if (i == 1)
+        // if (i == 1)
         //{
         //  std::cout << rprim << "\n";
         //  std::cout << r_active << "\n";
