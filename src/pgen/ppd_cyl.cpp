@@ -84,8 +84,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   x1max = pin->GetReal("mesh", "x1max");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   innerbdy = pin->GetReal("problem", "innerbdy");
-  // Calculation parameters.
-  r_exclude = pin->GetOrAddReal("problem", "gforce_r_exclude", 0);
   // Potential parameters
   innerbdy = pin->GetReal("problem", "innerbdy");
   m = pin->GetReal("problem", "m");
