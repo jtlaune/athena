@@ -32,9 +32,9 @@
 
 namespace
 {
-  Real gm1, ovSig, lambda, dfloor, pfloor, R0, cs0, CS02, Omega0, nu_iso;
+  Real ovSig, lambda, dfloor, pfloor, R0, cs0, CS02, Omega0, nu_iso;
   Real T_damp_bdy, WDL1, WDL2, x1min, x1max;
-  Real r_exclude, innerbdy;
+  Real r_exclude, innerbdy, A, m;
   int nPtEval;
 } // namespace
 
@@ -71,7 +71,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   cs0 = pin->GetReal("hydro", "iso_sound_speed");
   CS02 = SQR(cs0);
   // Secondary parameters.
-  gm1 = pin->GetReal("problem", "GM_s");
   // Disk parameters.
   ovSig = pin->GetReal("problem", "overlineSigma");
   lambda = pin->GetReal("problem", "lambda");
@@ -85,9 +84,12 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   x1max = pin->GetReal("mesh", "x1max");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   innerbdy = pin->GetReal("problem", "innerbdy");
-  // Sink parameters.
   // Calculation parameters.
   r_exclude = pin->GetOrAddReal("problem", "gforce_r_exclude", 0);
+  // Potential parameters
+  innerbdy = pin->GetReal("problem", "innerbdy");
+  m = pin->GetReal("problem", "m");
+  A = pin->GetReal("problem", "A");
 
   EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
   EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
@@ -187,6 +189,9 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         Fpr = -1. / rprim / rprim;
         cons(IM1, k, j, i) += dt * Sig * Fpr;
         cons(IM2, k, j, i) += 0;
+
+        // m component
+        cons(IM2, k, j, i) += dt * Sig * A * m * std::sin(m * x2 - Omega0 * time) / rprim;
 
         // Centrifugal force.
         cons(IM1, k, j, i) += dt * Sig * Omega0 * Omega0 * rprim;
