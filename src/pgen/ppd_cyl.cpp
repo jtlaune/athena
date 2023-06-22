@@ -153,7 +153,7 @@ Real AzimVelProf(const Real rad)
   // Velocity profile v(r)
   Real dPdr = dPresProfdr(rad);
   Real Sig = DenProf(rad);
-  return std::sqrt(dPdr * rad / Sig + 1 / rad) - Omega0 * rad;
+  return std::sqrt(dPdr * rad / Sig + 1 / rad);
 }
 
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
@@ -191,15 +191,6 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 
         // m component
         cons(IM2, k, j, i) += dt * Sig * A * m * std::sin(m * x2 - Omega0 * time) / rprim;
-
-        // Centrifugal force.
-        cons(IM1, k, j, i) += dt * Sig * Omega0 * Omega0 * rprim;
-
-        // Coriolis force.
-        vr = prim(IM1, k, j, i);
-        vth = prim(IM2, k, j, i);
-        cons(IM1, k, j, i) += 2 * dt * Sig * Omega0 * vth;
-        cons(IM2, k, j, i) += -2 * dt * Sig * Omega0 * vr;
 
         // Wave damping regions.
         if ((rprim <= innerbdy) and (innerbdy != x1min))
@@ -246,7 +237,7 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
         rprim = x1;
         Sig = DenProf(rprim);
         vk = AzimVelProf(rprim);
-        vr0 = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
+        vr0 = RadVelProf(rprim);
 
         phydro->u(IDN, k, j, i) = Sig;
         phydro->u(IM1, k, j, i) = Sig * vr0;
@@ -275,33 +266,14 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         x1 = pco->x1v(il - i);
 
         rprim = x1;
-        Sig = prim(IDN, k, j, il); // DenProf(rprim);
-        vr = prim(IVX, k, j, il);  // RadVelProf(rprim); //-1.5 * nu_iso / rprim;
-        vk = prim(IVY, k, j, il);  // AzimVelProf(rprim);
+        Sig = DenProf(rprim);
+        vr = RadVelProf(rprim);
+        vk = AzimVelProf(rprim);
 
-        prim(IDN, k, j, il - i) = Sig; // prim(IDN, k, j, il);
-        prim(IVY, k, j, il - i) = (vk + r_active * Omega0) * std::pow((x1 / r_active), -0.5) - rprim * Omega0;
-        prim(IVZ, k, j, il - i) = 0.; // prim(IVZ, k, j, il);
-        if (vr >= 0)
-        {
-          prim(IVX, k, j, il - i) = 0;
-        }
-        else
-        {
-          prim(IVX, k, j, il - i) = vr * std::pow((x1 / r_active), -1);
-        }
-        // dumb debugging for nlim=1, dcycle=1
-        // if (i == 1)
-        //{
-        //  std::cout << rprim << "\n";
-        //  std::cout << r_active << "\n";
-        //  std::cout << prim(IDN, k, j, il - i) << "\n";
-        //  std::cout << prim(IVX, k, j, il - i) << "\n";
-        //  std::cout << prim(IVY, k, j, il) << "\n";
-        //  std::cout << prim(IVY, k, j, il - i) << "\n";
-        //  std::cout << "--------end step--------"
-        //            << "\n";
-        //}
+        prim(IDN, k, j, il - i) = Sig;
+        prim(IVX, k, j, il - i) = vr;
+        prim(IVY, k, j, il - i) = vk;
+        prim(IVZ, k, j, il - i) = 0.;
       }
     }
   }
@@ -328,13 +300,13 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         x1 = pco->x1v(iu + i);
 
         rprim = x1;
-        Sig = prim(IDN, k, j, iu); // DenProf(rprim);
-        vr = prim(IVX, k, j, iu);  // RadVelProf(rprim); //-1.5 * nu_iso / rprim;
-        vk = prim(IVY, k, j, iu);  // AzimVelProf(rprim);
+        Sig = DenProf(rprim);
+        vr = RadVelProf(rprim);
+        vk = AzimVelProf(rprim);
 
         prim(IDN, k, j, iu + i) = Sig;
-        prim(IVX, k, j, iu + i) = vr * std::pow((x1 / r_active), -1);
-        prim(IVY, k, j, iu + i) = (vk + r_active * Omega0) * std::pow((x1 / r_active), -0.5) - rprim * Omega0;
+        prim(IVX, k, j, iu + i) = vr;
+        prim(IVY, k, j, iu + i) = vk;
         prim(IVZ, k, j, iu + i) = 0.;
       }
     }
