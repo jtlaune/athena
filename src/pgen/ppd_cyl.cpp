@@ -181,6 +181,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         vk = AzimVelProf(rprim);
         Sig0 = DenProf(rprim);
         Sig = prim(IDN, k, j, i);
+        vr0 = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
 
         // Primary gravity.
         // No softening because it is off-grid.
@@ -215,7 +216,6 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         {
           Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
           Real factor = splineKernel(x);
-          vr0 = RadVelProf(rprim); //-1.5 * nu_iso / rprim;
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
           cons(IM1, k, j, i) +=
