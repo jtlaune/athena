@@ -20,9 +20,9 @@ def main(**kwargs):
     output_file = kwargs['output']
 
     # Load Python plotting modules
-    if output_file != 'show':
-        import matplotlib
-        matplotlib.use('agg')
+    #if output_file != 'show':
+    import matplotlib
+    #    matplotlib.use('agg')
     import matplotlib.pyplot as plt
     # not used explicitly, but required for 3D projections
     from mpl_toolkits.mplot3d import Axes3D  # noqa
@@ -52,6 +52,8 @@ def main(**kwargs):
                 z = []
 
     plt.axis("off")
+    circ1 = matplotlib.patches.Circle((1,0),0.0069,fill=None,color="c")
+    plt.gca().add_patch(circ1)
 
     if output_file == 'show':
         plt.show()
