@@ -162,7 +162,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar)
 {
-  Real vk, vr, vr0, vth, Sig, Sig0, rprim, rsecn;
+  Real vk, vr0, vth, Sig, Sig0, rprim;
   Real x1, x2, x3;
   Real Fpr, Cs;
   for (int k = pmb->ks; k <= pmb->ke; ++k)
@@ -176,8 +176,6 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         x1 = pmb->pcoord->x1v(i);
 
         rprim = x1;
-        rsecn =
-            std::sqrt(rprim * rprim + R0 * R0 - 2 * R0 * rprim * std::cos(x2));
         vk = AzimVelProf(rprim);
         Sig0 = DenProf(rprim);
         Sig = prim(IDN, k, j, i);
@@ -247,6 +245,10 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
     }
   }
 }
+
+/*
+  Set to initial conditions (wave damping is in disk source)
+*/
 
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
