@@ -162,7 +162,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar)
 {
-  Real vk, vr0, vth, Sig, Sig0, rprim;
+  Real vk, vr0, vr, vth, Sig, Sig0, rprim;
   Real x1, x2, x3;
   Real Fpr, Cs;
   for (int k = pmb->ks; k <= pmb->ke; ++k)
