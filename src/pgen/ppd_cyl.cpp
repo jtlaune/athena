@@ -188,7 +188,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM2, k, j, i) += 0;
 
         // m component
-        cons(IM2, k, j, i) += dt * Sig * A * m * std::sin(m * x2 - Omega0 * time) / rprim;
+        cons(IM2, k, j, i) += dt * Sig * A * m * std::sin(m * x2) / rprim;
 
         // Centrifugal force.
         cons(IM1, k, j, i) += dt * Sig * Omega0 * Omega0 * rprim;
