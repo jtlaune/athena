@@ -486,7 +486,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 {
   Real x1, x2, x3;
   Real SigSlope, vrSlope, vkSlope, dx;
-  Real rprim, Sig, vk, vr;
+  Real Sig, vk, vr;
   Real r_active = pco->x1v(il);
   for (int k = kl; k <= ku; ++k)
   {
