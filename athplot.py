@@ -356,7 +356,7 @@ class PpdCylAthhdf5(object):
         coords = np.array(dd.fcoords)
         fwidths = np.array(dd.fwidth)
 
-        Nr = self.nx1
+        Nr = self.nx1 # root grid
         istart = 0
         iend = Nr + 1
 
