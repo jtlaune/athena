@@ -36,23 +36,22 @@ namespace
   Real T_damp_bdy, WDL1, WDL2, x1min, x1max, l_refine;
   Real rSink, rEval, sink_dens, r_exclude;
   int nPtEval;
-} // namespace
+}
 
+/*
+  Function declarations.
+*/
 Real DenProf(const Real rad);
 Real dDenProfdr(const Real rad);
 Real AzimVelProf(const Real rad);
 Real RadVelProf(const Real rad);
 Real dPresProfdr(const Real rad);
-// Real hProf(const Real rad);
 Real Measurements(MeshBlock *pmb, int iout);
-
-// User source function
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &prim,
                         const AthenaArray<Real> &prim_scalar,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar);
-// User-defined boundary conditions for disk simulations
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh);
@@ -60,8 +59,10 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh);
 Real splineKernel(Real x);
-// void MeshBlock::UserWorkInLoop();
 
+/*
+  Initialize the Mesh object with custom functions.
+*/
 void Mesh::InitUserMeshData(ParameterInput *pin)
 {
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
@@ -109,11 +110,13 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   return;
 }
 
+/*
+  Smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0.
+  Used for the wave damping zones at radial boundary (with appropriate
+  definitions for x).
+*/
 Real splineKernel(Real x)
 {
-  // Smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0.
-  // Used for the wave damping zones at radial boundary (with appropriate
-  // definitions for x).
   Real W;
   if (x < 0)
   {
@@ -135,10 +138,11 @@ Real splineKernel(Real x)
 }
 
 /*
-  These functions with "Prof" in their name are the unperturbed steady state (parameterized) background profiles.
-  Currently, only supports cs=const (lambda=0, temperature=constant, global isothermal).
+  These functions with "Prof" in their name are the 
+  unperturbed steady state (parameterized) background profiles.
+  Currently, only supports cs=const (lambda=0, temperature=constant,
+  global isothermal).
 */
-
 Real DenProf(const Real rad)
 {
   // Density profile Sigma(r) (unperturbed)
@@ -148,29 +152,40 @@ Real DenProf(const Real rad)
 
 Real dDenProfdr(const Real rad)
 {
-  // Derivative of density profile d(Sigma(r))/dr (unperturbed)
+  // Derivative of density profile d(Sigma(r))/dr (unperturbed).
   return 0;
 }
 
 Real dPresProfdr(const Real rad)
 {
+  // Derivative of pressure profile d(P(r))/dr (unperturbed).
   Real dSigdr = dDenProfdr(rad);
   return std::pow(cs0, 2) * dSigdr;
 }
 
 Real RadVelProf(const Real rad)
 {
+  // Radial velocity profile based on viscosity.
   return -3 * nu_iso / 2 / (rad / R0);
 }
 
 Real AzimVelProf(const Real rad)
 {
-  // Velocity profile v(r)
+  // Azimuthal velocity profile.
   Real dPdr = dPresProfdr(rad);
   Real Sig = DenProf(rad);
   return std::sqrt(dPdr * rad / Sig + 1 / rad) - Omega0 * rad;
 }
 
+/*
+  1. Pressure force (x-direction).
+  2. Pressure force (y-direction).
+  3. Gravitational force (x-direction).
+  4. Gravitational force (y-direction).
+  5. Mass accretion rate.
+  6. Accreted momentum (x-direction).
+  7. Accreted momentum (y-direction).
+*/
 Real Measurements(MeshBlock *pmb, int iout)
 {
   // User-defined history function. Must calculate a sum of values
@@ -340,6 +355,15 @@ Real Measurements(MeshBlock *pmb, int iout)
   }
 }
 
+/*
+  Source function for the disk.
+  1. Primary gravity.
+  2. Centrifugal force.
+  3. Coriolis force.
+  4. Satellite gravity.
+  5. Indirect terms.
+  6. Wave damping at the outer boundary (WDL1 to WDL2).
+*/
 void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &prim,
                         const AthenaArray<Real> &prim_scalar,
@@ -409,10 +433,13 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
   }
 }
 
+/*
+  Initial setup of conserved variables.
+*/
 void MeshBlock::ProblemGenerator(ParameterInput *pin)
 {
   Real x1, x2, x3;
-  Real Sig, vk, Cx, Cy;
+  Real Sig, vk;
   Real rprim, vr0;
   for (int k = ks; k <= ke; ++k)
   {
@@ -438,6 +465,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
   }
 }
 
+/*
+  Sink sphere accretion. Remove gas within r_sink.
+*/
 void Mesh::UserWorkInLoop()
 {
   Real rsecn, x1, x2, x3;
@@ -480,6 +510,9 @@ void Mesh::UserWorkInLoop()
   return;
 }
 
+/*
+  d/dr^2=0 on all quantities (linear extension into ghost zones).
+*/
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh)
@@ -529,7 +562,6 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 /*
   Set to initial conditions (wave damping is in disk source)
 */
-
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh)
