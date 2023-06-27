@@ -485,6 +485,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  int ju, int kl, int ku, int ngh)
 {
   Real x1, x2, x3;
+  Real SigSlope, vrSlope, vkSlope, dx;
   Real rprim, Sig, vk, vr;
   Real r_active = pco->x1v(il);
   for (int k = kl; k <= ku; ++k)
@@ -493,35 +494,33 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
     for (int j = jl; j <= ju; ++j)
     {
       x2 = pco->x2v(j);
+
+      dx = pco->x1v(il + 1) - pco->x1v(il);
+
+      SigSlope = (prim(IDN, k, j, il + 1) - prim(IDN, k, j, il)) / dx;
+      vrSlope = (prim(IVX, k, j, il + 1) - prim(IVX, k, j, il)) / dx;
+      vkSlope = (prim(IVY, k, j, il + 1) - prim(IVY, k, j, il)) / dx;
+
+      Sig = prim(IDN, k, j, il);
+      vr = prim(IVX, k, j, il);
+      vk = prim(IVY, k, j, il);
+
       for (int i = 1; i <= ngh; ++i)
       {
         x1 = pco->x1v(il - i);
 
-        rprim = x1;
-        Sig = prim(IDN, k, j, il); // DenProf(rprim);
-        vr = prim(IVX, k, j, il);  // RadVelProf(rprim); //-1.5 * nu_iso / rprim;
-        vk = prim(IVY, k, j, il);  // AzimVelProf(rprim);
+        prim(IDN, k, j, il - i) = Sig + (x1 - r_active) * SigSlope;
+        prim(IVY, k, j, il - i) = vk + (x1 - r_active) * vkSlope;
+        prim(IVZ, k, j, il - i) = 0.;
 
-        prim(IDN, k, j, il - i) = Sig; // prim(IDN, k, j, il);
-        prim(IVY, k, j, il - i) = (vk + r_active * Omega0) * std::pow((x1 / r_active), -0.5) - rprim * Omega0;
-        prim(IVZ, k, j, il - i) = 0.; // prim(IVZ, k, j, il);
-        if (vr >= 0) {
+        if (vr >= 0)
+        {
           prim(IVX, k, j, il - i) = 0;
-        } else {
-          prim(IVX, k, j, il - i) = vr;
         }
-        // dumb debugging for nlim=1, dcycle=1
-        //if (i == 1)
-        //{
-        //  std::cout << rprim << "\n";
-        //  std::cout << r_active << "\n";
-        //  std::cout << prim(IDN, k, j, il - i) << "\n";
-        //  std::cout << prim(IVX, k, j, il - i) << "\n";
-        //  std::cout << prim(IVY, k, j, il) << "\n";
-        //  std::cout << prim(IVY, k, j, il - i) << "\n";
-        //  std::cout << "--------end step--------"
-        //            << "\n";
-        //}
+        else
+        {
+          prim(IVX, k, j, il - i) = vr + (x1 - r_active) * vrSlope;
+        }
       }
     }
   }
