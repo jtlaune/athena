@@ -534,8 +534,7 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh)
 {
-  Real Sig, vk, rprim, x1, x2, x3, Cx, Cy, vr;
-  Real r_active = pco->x1v(iu);
+  Real x1, x2, x3;
   for (int k = kl; k <= ku; ++k)
   {
     x3 = pco->x3v(k);
@@ -546,14 +545,9 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
       {
         x1 = pco->x1v(iu + i);
 
-        rprim = x1;
-        Sig = prim(IDN, k, j, iu); // DenProf(rprim);
-        vr = prim(IVX, k, j, iu);  // RadVelProf(rprim); //-1.5 * nu_iso / rprim;
-        vk = prim(IVY, k, j, iu);  // AzimVelProf(rprim);
-
-        prim(IDN, k, j, iu + i) = Sig;
-        prim(IVX, k, j, iu + i) = vr * std::pow((x1 / r_active), -1);
-        prim(IVY, k, j, iu + i) = (vk + r_active * Omega0) * std::pow((x1 / r_active), -0.5) - rprim * Omega0;
+        prim(IDN, k, j, iu + i) = DenProf(x1);
+        prim(IVX, k, j, iu + i) = RadVelProf(x1);
+        prim(IVY, k, j, iu + i) = AzimVelProf(x1);
         prim(IVZ, k, j, iu + i) = 0.;
       }
     }
