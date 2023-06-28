@@ -554,21 +554,6 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         {
           prim(IVX, k, j, il - i) = vr + (x1 - r_active) * vrSlope;
         }
-
-        // dumb debugging for nlim=1, dcycle=1
-        if (i == 1)
-        {
-          std::cout << "--------start step--------"
-                    << "\n";
-          std::cout << x1 << "\n";
-          std::cout << r_active << "\n";
-          std::cout << pco->x1v(il + 1) << "\n";
-          std::cout << prim(IVX, k, j, il - i) << "\n";
-          std::cout << prim(IVX, k, j, il) << "\n";
-          std::cout << prim(IVX, k, j, il + i) << "\n";
-          std::cout << "--------end step--------"
-                    << "\n";
-        }
       }
     }
   }
