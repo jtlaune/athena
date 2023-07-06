@@ -61,10 +61,22 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
     cs0 = pin->GetReal("hydro", "iso_sound_speed");
 
     // Boundary conditions.
-    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, InnerX1);
-    EnrollUserBoundaryFunction(BoundaryFace::outer_x1, OuterX1);
-    EnrollUserBoundaryFunction(BoundaryFace::inner_x2, InnerX2);
-    EnrollUserBoundaryFunction(BoundaryFace::outer_x2, OuterX2);
+    if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user"))
+    {
+        EnrollUserBoundaryFunction(BoundaryFace::inner_x1, InnerX1);
+    }
+    if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user"))
+    {
+        EnrollUserBoundaryFunction(BoundaryFace::outer_x1, OuterX1);
+    }
+    if (mesh_bcs[BoundaryFace::inner_x2] == GetBoundaryFlag("user"))
+    {
+        EnrollUserBoundaryFunction(BoundaryFace::inner_x2, InnerX2);
+    }
+    if (mesh_bcs[BoundaryFace::outer_x2] == GetBoundaryFlag("user"))
+    {
+        EnrollUserBoundaryFunction(BoundaryFace::outer_x2, OuterX2);
+    }
 }
 
 Real DenProf(const Real x1)
