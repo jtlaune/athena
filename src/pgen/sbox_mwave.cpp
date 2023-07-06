@@ -33,15 +33,36 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
                         AthenaArray<Real> &cons_scalar);
 
+void OuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh);
+void InnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh);
+void OuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh);
+void InnerX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh);
+
 void Mesh::InitUserMeshData(ParameterInput *pin)
 {
+    // Source function with perturbation + rotating frame terms.
     EnrollUserExplicitSourceFunction(DiskSourceFunction);
 
     // m-wave component parameters
     m = pin->GetReal("problem", "m");
     A = pin->GetReal("problem", "A");
+    // shearing box parameters
     Omega0 = pin->GetReal("problem", "Omega0");
     qshear = pin->GetReal("problem", "qshear");
+
+    // Boundary conditions.
+    EnrollUserBoundaryFunction(BoundaryFace::inner_x1, InnerX1);
+    EnrollUserBoundaryFunction(BoundaryFace::outer_x1, OuterX1);
+    EnrollUserBoundaryFunction(BoundaryFace::inner_x2, InnerX2);
+    EnrollUserBoundaryFunction(BoundaryFace::outer_x2, OuterX2);
 }
 
 Real DenProf(const Real x1)
@@ -116,4 +137,29 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
             }
         }
     }
+}
+
+void OuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh)
+{
+
+}
+void InnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh)
+{
+
+}
+void OuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh)
+{
+
+}
+void InnerX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
+                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
+                 int ju, int kl, int ku, int ngh)
+{
+
 }
