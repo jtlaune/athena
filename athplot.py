@@ -314,7 +314,7 @@ class rawDataRestricted:
 
 
 class PpdCylAthhdf5(object):
-    def __init__(self, q, rootGrid, filename, outdir, quantities=None, **kwargs):
+    def __init__(self, q, rootGrid, filename, outdir, quantities=None, force=False, **kwargs):
         """
         q =     planet/star mass ratio
         rootGrid =      (Nx1,Nx2) of the rood grid
@@ -325,6 +325,7 @@ class PpdCylAthhdf5(object):
         self.nx1 = rootGrid[0]
         self.nx2 = rootGrid[1]
         self.data_dict = None
+        self.force = force
 
         _, outname = os.path.split(self.filename)
         outname, _ = os.path.splitext(outname)
@@ -332,7 +333,7 @@ class PpdCylAthhdf5(object):
         self.outname = os.path.join(outdir, outname)
 
     def load(self):
-        if os.path.exists(self.outname):
+        if os.path.exists(self.outname) and not self.force:
             self.data_dict = np.load(self.outname)
         else:
             self.reduce()
@@ -353,15 +354,19 @@ class PpdCylAthhdf5(object):
         dens_data = np.array(dd["athena_pp", "dens"])
         vr_data = np.array(dd["athena_pp", "mom1"]) / dens_data
         vphi_data = np.array(dd["athena_pp", "mom2"]) / dens_data
+        # coords are cell-centered
         coords = np.array(dd.fcoords)
+        # widths of cells
         fwidths = np.array(dd.fwidth)
 
+        ####################################
+        # Need to generalize from here on. #
+        ####################################
         Nr = self.nx1
-        istart = 0
-        iend = Nr + 1
-
-        edge_coords = np.linspace(0.4, 1.6, iend, endpoint=True)
-        midpts = (edge_coords[:-1] + edge_coords[1:]) / 2
+        ristart = 0
+        riend = Nr + 1
+        rEdges = np.linspace(0.4, 1.6, riend, endpoint=True)
+        rMids = (rEdges[:-1] + rEdges[1:]) / 2
 
         mRing = np.zeros(Nr)
         mDotRing = np.zeros(Nr)
@@ -378,8 +383,8 @@ class PpdCylAthhdf5(object):
             vphi = vphi_data[i]
             r = coords[i, 0]
             phi = coords[i, 1]
-            for j in range(istart, iend):
-                if edge_coords[j] < r < edge_coords[j + 1]:
+            for j in range(ristart, riend):
+                if rEdges[j] < r < rEdges[j + 1]:
                     rsecn = np.sqrt(r**2 + 1 - 2 * r * np.cos(phi))
                     x = r * np.cos(phi)
                     y = r * np.sin(phi)
@@ -405,9 +410,9 @@ class PpdCylAthhdf5(object):
                         GFx_rHexclProf[j] += GdFx
                         GFy_rHexclProf[j] += GdFy
 
-        SigProf = mRing / (2 * np.pi * midpts[:] * np.diff(edge_coords)[:])
-        vrProf = vrProf / (2 * np.pi * midpts[:] * np.diff(edge_coords)[:])
-        vphiProf = vphiProf / (2 * np.pi * midpts[:] * np.diff(edge_coords)[:])
+        SigProf = mRing / (2 * np.pi * rMids[:] * np.diff(rEdges)[:])
+        vrProf = vrProf / (2 * np.pi * rMids[:] * np.diff(rEdges)[:])
+        vphiProf = vphiProf / (2 * np.pi * rMids[:] * np.diff(rEdges)[:])
 
         np.savez(
             self.outname,
@@ -419,8 +424,8 @@ class PpdCylAthhdf5(object):
             Fx_g_rHexcl=GFx_rHexclProf,
             Fy_g_rHexcl=GFy_rHexclProf,
             Mdot=mDotRing,
-            rEdgeCoords=edge_coords,
-            rMidpts=midpts,
+            rEdgeCoords=rEdges,
+            rMidpts=rMids,
         )
         self.data_dict = np.load(self.outname)
 
@@ -471,33 +476,33 @@ class athhst(object):
             label=f"{label}" + r", $\mathtt{tot}$",
             zorder=-5,
         )
-        ax.plot(
-            self.t,
-            self.Fsgrav_y,
-            c=cl,
-            lw=2,
-            ls="--",
-            label=f"{label}" + r", $\mathtt{grav}$",
-            zorder=-5,
-        )
-        ax.plot(
-            self.t,
-            self.momy_accrate,
-            c=cl,
-            lw=2,
-            ls="-.",
-            label=f"{label}" + r" $\mathtt{accr}$",
-            zorder=-5,
-        )
-        ax.plot(
-            self.t,
-            self.FP_y,
-            c=cl,
-            lw=2,
-            ls=":",
-            label=f"{label}" + r", $\mathtt{pres}$",
-            zorder=-5,
-        )
+        #ax.plot(
+        #    self.t,
+        #    self.Fsgrav_y,
+        #    c=cl,
+        #    lw=2,
+        #    ls="--",
+        #    label=f"{label}" + r", $\mathtt{grav}$",
+        #    zorder=-5,
+        #)
+        #ax.plot(
+        #    self.t,
+        #    self.momy_accrate,
+        #    c=cl,
+        #    lw=2,
+        #    ls="-.",
+        #    label=f"{label}" + r" $\mathtt{accr}$",
+        #    zorder=-5,
+        #)
+        #ax.plot(
+        #    self.t,
+        #    self.FP_y,
+        #    c=cl,
+        #    lw=2,
+        #    ls=":",
+        #    label=f"{label}" + r", $\mathtt{pres}$",
+        #    zorder=-5,
+        #)
 
         ax.set_xlim((self.t[0], self.t[-1]))
         plotAdjustKwargs(fig, ax, **kwargs)
