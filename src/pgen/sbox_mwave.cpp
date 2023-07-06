@@ -21,7 +21,7 @@
 
 namespace
 {
-    Real A, m, qshear, Omega0;
+    Real A, m, qshear, Omega0, cs0;
 }
 
 Real DenProf(const Real rad);
@@ -57,6 +57,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
     // shearing box parameters
     Omega0 = pin->GetReal("problem", "Omega0");
     qshear = pin->GetReal("problem", "qshear");
+    // hydro parameters
+    cs0 = pin->GetReal("hydro", "iso_sound_speed");
 
     // Boundary conditions.
     EnrollUserBoundaryFunction(BoundaryFace::inner_x1, InnerX1);
@@ -71,7 +73,7 @@ Real DenProf(const Real x1)
 }
 Real AzimVelProf(const Real x1)
 {
-    return qshear * Omega0 * x1;
+    return -qshear * Omega0 * x1;
 }
 Real RadVelProf(const Real x1)
 {
