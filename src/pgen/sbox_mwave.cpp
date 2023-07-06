@@ -34,17 +34,17 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         AthenaArray<Real> &cons_scalar);
 
 void OuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh);
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh);
 void InnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh);
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh);
 void OuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh);
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh);
 void InnerX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh);
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh);
 
 void Mesh::InitUserMeshData(ParameterInput *pin)
 {
@@ -140,26 +140,140 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 }
 
 void OuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh)
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh)
 {
+    Real x1, x2, x3;
+    Real den, vx, vy;
+    for (int k = kl; k <= ku; ++k)
+    {
+        x3 = pco->x3v(k);
+        for (int j = jl; j <= ju; ++j)
+        {
+            x2 = pco->x2v(j);
+            for (int i = 1; i <= ngh; ++i)
+            {
+                x1 = pco->x1v(iu + i);
 
+                den = DenProf(x1);
+                vx = RadVelProf(x1);
+                vy = AzimVelProf(x1);
+
+                prim(IDN, k, j, iu + i) = den;
+                prim(IVX, k, j, iu + i) = vx;
+                prim(IVY, k, j, iu + i) = vy;
+                prim(IVZ, k, j, iu + i) = 0.;
+            }
+        }
+    }
 }
 void InnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh)
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh)
 {
+    Real x1, x2, x3;
+    Real den, vx, vy;
+    for (int k = kl; k <= ku; ++k)
+    {
+        x3 = pco->x3v(k);
+        for (int j = jl; j <= ju; ++j)
+        {
+            x2 = pco->x2v(j);
+            for (int i = 1; i <= ngh; ++i)
+            {
+                x1 = pco->x1v(il - i);
 
+                den = DenProf(x1);
+                vx = RadVelProf(x1);
+                vy = AzimVelProf(x1);
+
+                prim(IDN, k, j, il - i) = den;
+                prim(IVX, k, j, il - i) = vx;
+                prim(IVY, k, j, il - i) = vy;
+                prim(IVZ, k, j, il - i) = 0.;
+            }
+        }
+    }
 }
 void OuterX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh)
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh)
 {
+    Real x1, x2, x3;
+    Real den, vx, vy;
+    for (int k = kl; k <= ku; ++k)
+    {
+        x3 = pco->x3v(k);
+        for (int j = 1; j <= ngh; ++j)
+        {
+            x2 = pco->x2v(ju + j);
+            for (int i = il; i <= iu; ++i)
+            {
+                x1 = pco->x1v(i);
 
+                den = DenProf(x1);
+                vx = RadVelProf(x1);
+                vy = AzimVelProf(x1);
+
+                // x2 (y) > 0
+                if (x1 > 0)
+                {
+                    // inflow fixed to initial
+                    prim(IDN, k, ju + j, i) = den;
+                    prim(IVX, k, ju + j, i) = vx;
+                    prim(IVY, k, ju + j, i) = vy;
+                    prim(IVZ, k, ju + j, i) = 0.;
+                }
+                else
+                {
+                    // outflow copied from last active
+                    prim(IDN, k, ju + j, i) = prim(IDN, k, ju, i);
+                    prim(IVX, k, ju + j, i) = prim(IVX, k, ju, i);
+                    prim(IVY, k, ju + j, i) = prim(IVY, k, ju, i);
+                    prim(IVZ, k, ju + j, i) = prim(IVZ, k, ju, i);
+                }
+            }
+        }
+    }
 }
 void InnerX2(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
-                 FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh)
+             FaceField &b, Real time, Real dt, int il, int iu, int jl,
+             int ju, int kl, int ku, int ngh)
 {
+    Real x1, x2, x3;
+    Real den, vx, vy;
+    for (int k = kl; k <= ku; ++k)
+    {
+        x3 = pco->x3v(k);
+        for (int j = 1; j <= ngh; ++j)
+        {
+            x2 = pco->x2v(jl - j);
+            for (int i = il; i <= iu; ++i)
+            {
+                x1 = pco->x1v(i);
 
+                den = DenProf(x1);
+                vx = RadVelProf(x1);
+                vy = AzimVelProf(x1);
+
+                // x2 (y) < 0
+                if (x1 > 0)
+                {
+                    // outflow copied from last active
+                    prim(IDN, k, jl - j, i) = prim(IDN, k, jl, i);
+                    prim(IVX, k, jl - j, i) = prim(IVX, k, jl, i);
+                    prim(IVY, k, jl - j, i) = prim(IVY, k, jl, i);
+                    prim(IVZ, k, jl - j, i) = prim(IVZ, k, jl, i);
+                }
+                else
+                {
+                    // inflow fixed to initial
+                    prim(IDN, k, jl - j, i) = den;
+                    prim(IVX, k, jl - j, i) = vx;
+                    prim(IVY, k, jl - j, i) = vy;
+                    prim(IVZ, k, jl - j, i) = 0.;
+                }
+            }
+        }
+    }
 }
