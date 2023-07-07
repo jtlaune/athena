@@ -12,6 +12,11 @@ sys.path.insert(0, "/home/astrosun/jtlaune/athena/vis/python/")
 import athena_read as athr
 
 
+def movingAverage(data, wsize):
+    cumsum = np.cumsum(np.pad(data, int(wsize / 2), mode="edge"))
+    return (cumsum[wsize:] - cumsum[:-wsize]) / wsize
+
+
 def plotAdjustKwargs(fig, ax, **kwargs):
     if "ybds" in kwargs.keys():
         ax.set_ylim(kwargs["ybds"][0], kwargs["ybds"][1])
@@ -309,12 +314,14 @@ class rawDataRestricted:
                 lds[var],
                 shading="nearest",
                 cmap="inferno",
-                norm=colors.LogNorm(vmin,vmax),
+                norm=colors.LogNorm(vmin, vmax),
             )
 
 
 class PpdCylAthhdf5(object):
-    def __init__(self, q, rootGrid, filename, outdir, quantities=None, force=False, **kwargs):
+    def __init__(
+        self, q, rootGrid, filename, outdir, quantities=None, force=False, **kwargs
+    ):
         """
         q =     planet/star mass ratio
         rootGrid =      (Nx1,Nx2) of the rood grid
@@ -375,7 +382,7 @@ class PpdCylAthhdf5(object):
         GFx_rHexclProf = np.zeros(Nr)
         GFy_rHexclProf = np.zeros(Nr)
         vrProf = np.zeros(Nr)
-        vphiProf = np.zeros(Nr) 
+        vphiProf = np.zeros(Nr)
 
         for i in range(len(dens_data)):
             Sig = dens_data[i]
@@ -398,8 +405,8 @@ class PpdCylAthhdf5(object):
                     GFxProf[j] += GdFx
                     GFyProf[j] += GdFy
 
-                    vrProf[j] += dA*vr
-                    vphiProf[j] += dA*vphi
+                    vrProf[j] += dA * vr
+                    vphiProf[j] += dA * vphi
 
                     dm = dA * Sig
                     dmDot = r * dphi * Sig * vr
@@ -448,7 +455,7 @@ class athhst(object):
         self.momy_accrate = self.data[:it, -1]
 
     @mpl.rc_context(analytic)
-    def plotGravTorq(self, label, **kwargs):
+    def plotSmoothTorq(self, label, wsize, **kwargs):
         """
         kwargs
         figax=      (fig, ax)
@@ -466,43 +473,60 @@ class athhst(object):
         else:
             cl = "k"
 
+        if "ct" in kwargs.keys():
+            clt = kwargs["ct"]
+        else:
+            clt = cl
+
+        if "step" in kwargs.keys():
+            step = kwargs["step"]
+        else:
+            step = 1
+
         totTorq = self.Fsgrav_y + self.momy_accrate + self.FP_y
+
+        maTot = movingAverage(totTorq, wsize)[::step]
+        maGravy = movingAverage(self.Fsgrav_y, wsize)[::step]
+        maMomy = movingAverage(self.momy_accrate, wsize)[::step]
+        maPres = movingAverage(self.FP_y, wsize)[::step]
+        t = self.t[::step]
+
         ax.plot(
-            self.t,
-            totTorq,
-            c=cl,
+            t,
+            maTot,
+            c=clt,
             lw=2,
             ls="-",
             label=f"{label}" + r", $\mathtt{tot}$",
+            zorder=10,
+        )
+        ax.plot(
+            t,
+            maGravy,
+            c=cl,
+            lw=2,
+            ls="--",
+            label=f"{label}" + r", $\mathtt{grav}$",
             zorder=-5,
         )
-        #ax.plot(
-        #    self.t,
-        #    self.Fsgrav_y,
-        #    c=cl,
-        #    lw=2,
-        #    ls="--",
-        #    label=f"{label}" + r", $\mathtt{grav}$",
-        #    zorder=-5,
-        #)
-        #ax.plot(
-        #    self.t,
-        #    self.momy_accrate,
-        #    c=cl,
-        #    lw=2,
-        #    ls="-.",
-        #    label=f"{label}" + r" $\mathtt{accr}$",
-        #    zorder=-5,
-        #)
-        #ax.plot(
-        #    self.t,
-        #    self.FP_y,
-        #    c=cl,
-        #    lw=2,
-        #    ls=":",
-        #    label=f"{label}" + r", $\mathtt{pres}$",
-        #    zorder=-5,
-        #)
+        ax.plot(
+            t,
+            maMomy,
+            c=cl,
+            lw=2,
+            ls="-.",
+            label=f"{label}" + r" $\mathtt{accr}$",
+            zorder=-5,
+        )
+        ax.plot(
+            t,
+            maPres,
+            c=cl,
+            lw=2,
+            ls=":",
+            label=f"{label}" + r", $\mathtt{pres}$",
+            zorder=-5,
+        )
 
         ax.set_xlim((self.t[0], self.t[-1]))
         plotAdjustKwargs(fig, ax, **kwargs)
