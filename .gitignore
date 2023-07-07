@@ -67,3 +67,6 @@ doc/doxy*
 *.png
 
 __pycache__/
+work*
+.vscode/
+*.npz
