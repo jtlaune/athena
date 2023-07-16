@@ -309,7 +309,7 @@ class rawDataRestricted:
                 lds[var],
                 shading="nearest",
                 cmap="inferno",
-                norm=colors.LogNorm(vmin,vmax),
+                norm=colors.LogNorm(vmin, vmax),
             )
 
 
@@ -355,6 +355,7 @@ class PpdCylAthhdf5(object):
         vphi_data = np.array(dd["athena_pp", "mom2"]) / dens_data
         coords = np.array(dd.fcoords)
         fwidths = np.array(dd.fwidth)
+        print(fwidths)
 
         Nr = self.nx1
         istart = 0
@@ -370,7 +371,7 @@ class PpdCylAthhdf5(object):
         GFx_rHexclProf = np.zeros(Nr)
         GFy_rHexclProf = np.zeros(Nr)
         vrProf = np.zeros(Nr)
-        vphiProf = np.zeros(Nr) 
+        vphiProf = np.zeros(Nr)
 
         for i in range(len(dens_data)):
             Sig = dens_data[i]
@@ -393,8 +394,8 @@ class PpdCylAthhdf5(object):
                     GFxProf[j] += GdFx
                     GFyProf[j] += GdFy
 
-                    vrProf[j] += dA*vr
-                    vphiProf[j] += dA*vphi
+                    vrProf[j] += dA * vr
+                    vphiProf[j] += dA * vphi
 
                     dm = dA * Sig
                     dmDot = r * dphi * Sig * vr
@@ -421,6 +422,7 @@ class PpdCylAthhdf5(object):
             Mdot=mDotRing,
             rEdgeCoords=edge_coords,
             rMidpts=midpts,
+            mRing=mRing,
         )
         self.data_dict = np.load(self.outname)
 
