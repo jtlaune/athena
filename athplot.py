@@ -13,8 +13,11 @@ import athena_read as athr
 
 
 def movingAverage(data, wsize):
-    cumsum = np.cumsum(np.pad(data, int(wsize / 2), mode="edge"))
-    return (cumsum[wsize:] - cumsum[:-wsize]) / wsize
+    if wsize > 1:
+        cumsum = np.cumsum(np.pad(data, int(wsize / 2), mode="edge"))
+        return (cumsum[wsize:] - cumsum[:-wsize]) / wsize
+    else:
+        return(data)
 
 
 def plotAdjustKwargs(fig, ax, **kwargs):
@@ -531,7 +534,7 @@ class athhst(object):
         ax.set_xlim((self.t[0], self.t[-1]))
         plotAdjustKwargs(fig, ax, **kwargs)
         ax.grid(True)
-        ax.set_ylabel(r"$\Gamma/(M_pR_0^2\Omega^2)$")
+        ax.set_ylabel(r"$\Gamma/\Gamma_0$")
         ax.set_xlabel(r"$T/(2\pi\Omega^{-1})$")
 
         ax.legend(bbox_to_anchor=[1.0, 1.0, 0, 0])
