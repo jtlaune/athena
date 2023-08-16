@@ -70,3 +70,4 @@ __pycache__/
 work*
 .vscode/
 *.npz
+Interactive.bak.ipynb
