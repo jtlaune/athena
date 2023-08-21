@@ -71,3 +71,4 @@ work*
 .vscode/
 *.npz
 Interactive.bak.ipynb
+torque-check.ipynb
