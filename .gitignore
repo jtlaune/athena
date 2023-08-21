@@ -70,3 +70,6 @@ __pycache__/
 work*
 .vscode/
 *.npz
+Interactive.bak.ipynb
+torque-check.ipynb
+athena.code-workspace
