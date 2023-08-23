@@ -210,7 +210,7 @@ Real Measurements(MeshBlock *pmb, int iout)
   Real PxEvals[nPtEval];
   Real PyEvals[nPtEval];
 
-  for (int l = 0; l <= nPtEval; l++)
+  for (int l = 0; l < nPtEval; l++)
   {
     mDotEvalVals[l] = 0;
     FxEvals[l] = 0;
@@ -246,7 +246,7 @@ Real Measurements(MeshBlock *pmb, int iout)
         // For now, doing nearest neighbor.
         if (rsecn < 2 * rEval)
         { // only do eval if we are near the sink
-          for (int l = 0; l <= nPtEval; l++)
+          for (int l = 0; l < nPtEval; l++)
           {
             angEval = 2 * PI / nPtEval * l;
 
@@ -307,18 +307,18 @@ Real Measurements(MeshBlock *pmb, int iout)
     }
   }
 
-  for (int l = 0; l <= nPtEval; l++)
+  for (int l = 0; l < nPtEval; l++)
   {
     // evalVals[l] being different from its initialized value means it was
     // altered in this meshblock.
-    if (mDotEvalVals[l] != 0)
-    {
+    //if (mDotEvalVals[l] != 0)
+    //{
       PxForce += PxEvals[l];
       PyForce += PyEvals[l];
       momxRate += FxEvals[l];
       momyRate += FyEvals[l];
       AccRate += mDotEvalVals[l];
-    }
+    //}
   }
 
   if (iout == 0)
