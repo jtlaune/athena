@@ -72,3 +72,5 @@ work*
 *.npz
 Interactive.bak.ipynb
 torque-check.ipynb
+*.ipynb
+athena.code-workspace
