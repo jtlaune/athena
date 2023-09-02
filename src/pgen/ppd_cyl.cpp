@@ -33,7 +33,7 @@
 namespace
 {
   Real gm1, ovSig, lambda, dfloor, pfloor, R0, cs0, CS02, Omega0, soft_sat, nu_iso;
-  Real T_damp_bdy, WDL1, WDL2, x1min, x1max, l_refine;
+  Real T_damp_bdy, WDL1, WDL2, x1min, x1max, l_refine, l0;
   Real rSink, rEval, sink_dens, r_exclude;
   int nPtEval;
 }
@@ -91,6 +91,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   R0 = pin->GetReal("problem", "R0");
   Omega0 = pin->GetReal("problem", "Omega0");
   nu_iso = pin->GetReal("problem", "nu_iso");
+  l0 = pin->GetReal("problem","l0");
   // Boundary conditions.
   WDL1 = pin->GetReal("problem", "WaveDampingLength_in");
   WDL2 = pin->GetReal("problem", "WaveDampingLength_out");
@@ -147,13 +148,13 @@ Real DenProf(const Real rad)
 {
   // Density profile Sigma(r) (unperturbed)
   // x1max and rad both in units R0
-  return ovSig;
+  return ovSig*(1-l0/std::sqrt(rad/R0));
 }
 
 Real dDenProfdr(const Real rad)
 {
   // Derivative of density profile d(Sigma(r))/dr (unperturbed).
-  return 0;
+  return ovSig*l0/2/(rad/R0)/std::sqrt(rad/R0);
 }
 
 Real dPresProfdr(const Real rad)
@@ -166,7 +167,7 @@ Real dPresProfdr(const Real rad)
 Real RadVelProf(const Real rad)
 {
   // Radial velocity profile based on viscosity.
-  return -3 * nu_iso / 2 / (rad / R0);
+  return -3 * nu_iso / 2 / (rad / R0)/(1-l0/std::sqrt(rad/R0));
 }
 
 Real AzimVelProf(const Real rad)
