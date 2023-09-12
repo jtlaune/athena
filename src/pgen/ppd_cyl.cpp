@@ -30,11 +30,13 @@
 #include "../orbital_advection/orbital_advection.hpp"
 #include "../parameter_input.hpp"
 
-namespace {
-Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
-Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
-Real rSink, rEval, sink_dens, r_exclude, nu_iso;
-int nPtEval;
+namespace
+{
+  Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
+  Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
+  Real rSink, rEval, sink_dens, r_exclude, nu_iso;
+  Real vrMultiplyInner, vrMultiplyOuter;
+  int nPtEval;
 } // namespace
 
 Real DenProf(const Real rad);
@@ -59,9 +61,11 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 Real splineKernel(Real x);
 // void MeshBlock::UserWorkInLoop();
 
-void Mesh::InitUserMeshData(ParameterInput *pin) {
+void Mesh::InitUserMeshData(ParameterInput *pin)
+{
   EnrollUserExplicitSourceFunction(DiskSourceFunction);
-  if (adaptive == true) {
+  if (adaptive == true)
+  {
     EnrollUserRefinementCondition(RefinementCondition);
   }
   AllocateUserHistoryOutput(7);
@@ -94,6 +98,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   x1min = pin->GetReal("mesh", "x1min");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   T_damp_in = pin->GetReal("problem", "T_damp_in");
+  vrMultiplyInner = pin->GetReal("problem", "vrMultiplyInner");
+  vrMultiplyOuter = pin->GetReal("problem", "vrMultiplyOuter");
   // Sink parameters.
   rSink = pin->GetReal("problem", "sink_radius");
   rEval = pin->GetReal("problem", "eval_radius");
@@ -103,48 +109,62 @@ void Mesh::InitUserMeshData(ParameterInput *pin) {
   r_exclude = pin->GetOrAddReal("problem", "gforce_r_exclude", 0);
 
   // Enroll user-defined boundary condition.
-  if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user")) {
+  if (mesh_bcs[BoundaryFace::inner_x1] == GetBoundaryFlag("user"))
+  {
     EnrollUserBoundaryFunction(BoundaryFace::inner_x1, DiskInnerX1);
   }
-  if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user")) {
+  if (mesh_bcs[BoundaryFace::outer_x1] == GetBoundaryFlag("user"))
+  {
     EnrollUserBoundaryFunction(BoundaryFace::outer_x1, DiskOuterX1);
   }
   return;
 }
 
-Real splineKernel(Real x) {
+Real splineKernel(Real x)
+{
   // Smooth transition f(x)=0 @ x=1 and f(x)=1 @ x=0.
   // Used for the wave damping zones at radial boundary (with appropriate
   // definitions for x).
   Real W;
-  if (x < 0) {
+  if (x < 0)
+  {
     W = 1.;
-  } else if (x <= 0.5) {
+  }
+  else if (x <= 0.5)
+  {
     W = 1. - 6. * x * x + 6. * x * x * x;
-  } else if (x <= 1) {
+  }
+  else if (x <= 1)
+  {
     W = 2. * (1 - x) * (1 - x) * (1 - x);
-  } else {
+  }
+  else
+  {
     W = 0.;
   }
   return (W);
 }
 
-Real DenProf(const Real rad) {
+Real DenProf(const Real rad)
+{
   // Density profile Sigma(r)
   return (std::max(Sig0 * std::pow(rad / R0, dslope), dfloor));
 }
 
-Real VelProf(const Real rad) {
+Real VelProf(const Real rad)
+{
   // Velocity profile v(r)
   return std::sqrt(dslope * CS02 + 1 / rad) - Omega0 * rad;
 }
 
-Real RadVelProf(const Real rad) {
+Real RadVelProf(const Real rad)
+{
   // Velocity profile v(r)
-  return -3*nu_iso/(2*rad);
+  return -3 * nu_iso / (2 * rad);
 }
 
-Real Measurements(MeshBlock *pmb, int iout) {
+Real Measurements(MeshBlock *pmb, int iout)
+{
   // User-defined history function. Must calculate a sum of values
   // within each MeshBlock & athena turns it into a global sum automatically.
   Real F_x = 0, F_y = 0, Sig, x1, x2, x3;
@@ -167,7 +187,8 @@ Real Measurements(MeshBlock *pmb, int iout) {
   Real PxEvals[nPtEval];
   Real PyEvals[nPtEval];
 
-  for (int l = 0; l < nPtEval; l++) {
+  for (int l = 0; l < nPtEval; l++)
+  {
     mDotEvalVals[l] = 0;
     FxEvals[l] = 0;
     FyEvals[l] = 0;
@@ -175,11 +196,14 @@ Real Measurements(MeshBlock *pmb, int iout) {
     PyEvals[l] = 0;
   }
 
-  for (int k = ks; k <= ke; k++) {
+  for (int k = ks; k <= ke; k++)
+  {
     x3 = pmb->pcoord->x3v(k);
-    for (int j = js; j <= je; j++) {
+    for (int j = js; j <= je; j++)
+    {
       x2 = pmb->pcoord->x2v(j);
-      for (int i = is; i <= ie; i++) {
+      for (int i = is; i <= ie; i++)
+      {
         x1 = pmb->pcoord->x1v(i);
 
         Sig = pmb->phydro->u(IDN, k, j, i);
@@ -188,7 +212,8 @@ Real Measurements(MeshBlock *pmb, int iout) {
         rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
         rsoft = std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
 
-        if (rsecn > r_exclude) {
+        if (rsecn > r_exclude)
+        {
           Fmag = gm1 / rsoft / rsoft / rsoft;
           // Fmag = gm1/rsecn/rsecn/rsecn;
           F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
@@ -196,8 +221,10 @@ Real Measurements(MeshBlock *pmb, int iout) {
         }
 
         // For now, doing nearest neighbor.
-        if (rsecn < 2 * rEval) { // only do eval if we are near the sink
-          for (int l = 0; l < nPtEval; l++) {
+        if (rsecn < 2 * rEval)
+        { // only do eval if we are near the sink
+          for (int l = 0; l < nPtEval; l++)
+          {
             angEval = 2 * PI / nPtEval * l;
 
             // sample locus of circle at secondary with radius rEval
@@ -213,13 +240,16 @@ Real Measurements(MeshBlock *pmb, int iout) {
             rpeval = sqrt(xEval * xEval + yEval * yEval);
             theval = std::atan2(yEval, xEval);
 
-            if ((rf1 <= rpeval) && (rpeval < rf2)) {
-              if ((thf1 <= theval) && (theval < thf2)) {
+            if ((rf1 <= rpeval) && (rpeval < rf2))
+            {
+              if ((thf1 <= theval) && (theval < thf2))
+              {
                 InsideCell = true;
               }
             }
 
-            if (InsideCell) {
+            if (InsideCell)
+            {
               // Go from polar -> local cartesian.
               // Because x2<<1 near the sink, this should not be a huge
               // adjustment.
@@ -254,33 +284,49 @@ Real Measurements(MeshBlock *pmb, int iout) {
     }
   }
 
-  for (int l = 0; l < nPtEval; l++) {
+  for (int l = 0; l < nPtEval; l++)
+  {
     // evalVals[l] being different from its initialized value means it was
     // altered in this meshblock.
-    //if (mDotEvalVals[l] != 0) {
-      PxForce += PxEvals[l];
-      PyForce += PyEvals[l];
-      momxRate += FxEvals[l];
-      momyRate += FyEvals[l];
-      AccRate += mDotEvalVals[l];
+    // if (mDotEvalVals[l] != 0) {
+    PxForce += PxEvals[l];
+    PyForce += PyEvals[l];
+    momxRate += FxEvals[l];
+    momyRate += FyEvals[l];
+    AccRate += mDotEvalVals[l];
     //}
   }
 
-  if (iout == 0) {
+  if (iout == 0)
+  {
     return PxForce;
-  } else if (iout == 1) {
+  }
+  else if (iout == 1)
+  {
     return PyForce;
-  } else if (iout == 2) {
+  }
+  else if (iout == 2)
+  {
     return F_x;
-  } else if (iout == 3) {
+  }
+  else if (iout == 3)
+  {
     return F_y;
-  } else if (iout == 4) {
+  }
+  else if (iout == 4)
+  {
     return AccRate;
-  } else if (iout == 5) {
+  }
+  else if (iout == 5)
+  {
     return momxRate;
-  } else if (iout == 6) {
+  }
+  else if (iout == 6)
+  {
     return momyRate;
-  } else {
+  }
+  else
+  {
     return 0.;
   }
 }
@@ -289,15 +335,19 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
                         const AthenaArray<Real> &prim,
                         const AthenaArray<Real> &prim_scalar,
                         const AthenaArray<Real> &bcc, AthenaArray<Real> &cons,
-                        AthenaArray<Real> &cons_scalar) {
+                        AthenaArray<Real> &cons_scalar)
+{
   Real vk, vr, vr0, vth, Sig, Sig0, rprim, rsecn;
   Real x1, x2, x3;
   Real Fpr, Cs;
-  for (int k = pmb->ks; k <= pmb->ke; ++k) {
+  for (int k = pmb->ks; k <= pmb->ke; ++k)
+  {
     x3 = pmb->pcoord->x3v(k);
-    for (int j = pmb->js; j <= pmb->je; ++j) {
+    for (int j = pmb->js; j <= pmb->je; ++j)
+    {
       x2 = pmb->pcoord->x2v(j);
-      for (int i = pmb->is; i <= pmb->ie; ++i) {
+      for (int i = pmb->is; i <= pmb->ie; ++i)
+      {
         x1 = pmb->pcoord->x1v(i);
 
         rprim = x1;
@@ -334,22 +384,24 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM2, k, j, i) += +gm1 * dt * Sig * std::sin(x2) / (R0 * R0);
 
         // Wave damping regions.
-        if ((rprim <= innerbdy) and (innerbdy != x1min)) {
+        if ((rprim <= innerbdy) and (innerbdy != x1min))
+        {
           Real x = (rprim - x1min) / (innerbdy - x1min);
           Real factor = splineKernel(x);
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_in;
-          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_in;
+          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i) - Sig0 * (vr0 * vrMultiplyInner)) / T_damp_in;
           cons(IM2, k, j, i) +=
               -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_in;
         }
-        if ((rprim >= WDL1) and (WDL2 != WDL1)) {
+        if ((rprim >= WDL1) and (WDL2 != WDL1))
+        {
           Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
           Real factor = splineKernel(x);
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
           cons(IM1, k, j, i) +=
-              -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_bdy;
+              -factor * dt * (cons(IM1, k, j, i) - Sig0 * (vr0 * vrMultiplyOuter)) / T_damp_bdy;
           cons(IM2, k, j, i) +=
               -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_bdy;
         }
@@ -358,15 +410,19 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
   }
 }
 
-void MeshBlock::ProblemGenerator(ParameterInput *pin) {
+void MeshBlock::ProblemGenerator(ParameterInput *pin)
+{
   Real x1, x2, x3;
   Real Sig, vk, vr0, Cx, Cy;
   Real rprim;
-  for (int k = ks; k <= ke; ++k) {
+  for (int k = ks; k <= ke; ++k)
+  {
     x3 = pcoord->x3v(k);
-    for (int j = js; j <= je; ++j) {
+    for (int j = js; j <= je; ++j)
+    {
       x2 = pcoord->x2v(j);
-      for (int i = is; i <= ie; ++i) {
+      for (int i = is; i <= ie; ++i)
+      {
         x1 = pcoord->x1v(i);
 
         rprim = x1;
@@ -375,28 +431,46 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin) {
         vr0 = RadVelProf(rprim);
 
         phydro->u(IDN, k, j, i) = Sig;
-        phydro->u(IM1, k, j, i) = Sig * vr0;
         phydro->u(IM2, k, j, i) = Sig * vk;
         phydro->u(IM3, k, j, i) = 0.;
+
+        if (x1 < innerbdy)
+        {
+          phydro->u(IM1, k, j, i) = Sig * vr0 * vrMultiplyInner;
+        }
+        else if (x1 > WDL1)
+        {
+          phydro->u(IM1, k, j, i) = Sig * vr0 * vrMultiplyOuter;
+        }
+        else
+        {
+          phydro->u(IM1, k, j, i) = 0;
+        }
       }
     }
   }
 }
 
-void Mesh::UserWorkInLoop() {
+void Mesh::UserWorkInLoop()
+{
   Real rsecn, x1, x2, x3;
-  for (int bn = 0; bn < nblocal; ++bn) {
+  for (int bn = 0; bn < nblocal; ++bn)
+  {
     MeshBlock *pmb = my_blocks(bn);
     // LogicalLocation &loc = pmb->loc;
     // if (loc.level == nLevel) { // lowest level
-    for (int k = pmb->ks; k <= pmb->ke; k++) {
+    for (int k = pmb->ks; k <= pmb->ke; k++)
+    {
       x3 = pmb->pcoord->x3v(k);
-      for (int j = pmb->js; j <= pmb->je; j++) {
+      for (int j = pmb->js; j <= pmb->je; j++)
+      {
         x2 = pmb->pcoord->x2v(j);
-        for (int i = pmb->is; i <= pmb->ie; i++) {
+        for (int i = pmb->is; i <= pmb->ie; i++)
+        {
           x1 = pmb->pcoord->x1v(i);
           rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
-          if (rsecn < rSink) {
+          if (rsecn < rSink)
+          {
             pmb->phydro->w(IVX, k, j, i) = 0;
             pmb->phydro->w(IVY, k, j, i) = 0;
             pmb->phydro->w(IVZ, k, j, i) = 0;
@@ -419,16 +493,19 @@ void Mesh::UserWorkInLoop() {
   return;
 }
 
-int RefinementCondition(MeshBlock *pmb) {
+int RefinementCondition(MeshBlock *pmb)
+{
   Real x1min = pmb->pcoord->x1v(pmb->is);
   Real x1max = pmb->pcoord->x1v(pmb->ie);
   Real x2min = pmb->pcoord->x2v(pmb->js);
   Real x2max = pmb->pcoord->x2v(pmb->je);
   Real cond = 0;
-  if ((x1min < (R0 + l_refine)) and (x1max > (R0 - l_refine))) {
+  if ((x1min < (R0 + l_refine)) and (x1max > (R0 - l_refine)))
+  {
     // radial band
     if ((x2min < 2 * PI * l_refine / R0) and
-        (x2max > -2 * PI * l_refine / R0)) {
+        (x2max > -2 * PI * l_refine / R0))
+    {
       // azimuthal band
       cond = 1;
     }
@@ -438,13 +515,17 @@ int RefinementCondition(MeshBlock *pmb) {
 
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh) {
+                 int ju, int kl, int ku, int ngh)
+{
   Real Sig, vk, vr0, rprim, x1, x2, x3, Cx, Cy;
-  for (int k = kl; k <= ku; ++k) {
+  for (int k = kl; k <= ku; ++k)
+  {
     x3 = pco->x3v(k);
-    for (int j = jl; j <= ju; ++j) {
+    for (int j = jl; j <= ju; ++j)
+    {
       x2 = pco->x2v(j);
-      for (int i = 1; i <= ngh; ++i) {
+      for (int i = 1; i <= ngh; ++i)
+      {
         x1 = pco->x1v(il - i);
 
         rprim = x1;
@@ -453,7 +534,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         vr0 = RadVelProf(rprim);
 
         prim(IDN, k, j, il - i) = Sig;
-        prim(IM1, k, j, il - i) = vr0;
+        prim(IM1, k, j, il - i) = (vr0 * vrMultiplyInner);
         prim(IM2, k, j, il - i) = vk;
         prim(IM3, k, j, il - i) = 0.;
       }
@@ -463,13 +544,17 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
 
 void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
-                 int ju, int kl, int ku, int ngh) {
+                 int ju, int kl, int ku, int ngh)
+{
   Real Sig, vk, vr0, rprim, x1, x2, x3, Cx, Cy;
-  for (int k = kl; k <= ku; ++k) {
+  for (int k = kl; k <= ku; ++k)
+  {
     x3 = pco->x3v(k);
-    for (int j = jl; j <= ju; ++j) {
+    for (int j = jl; j <= ju; ++j)
+    {
       x2 = pco->x2v(j);
-      for (int i = 1; i <= ngh; ++i) {
+      for (int i = 1; i <= ngh; ++i)
+      {
         x1 = pco->x1v(iu + i);
 
         rprim = x1;
@@ -478,7 +563,7 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         vr0 = RadVelProf(rprim);
 
         prim(IDN, k, j, iu + i) = Sig;
-        prim(IM1, k, j, iu + i) = vr0;
+        prim(IM1, k, j, iu + i) = (vr0 * vrMultiplyOuter);
         prim(IM2, k, j, iu + i) = vk;
         prim(IM3, k, j, iu + i) = 0.;
       }
