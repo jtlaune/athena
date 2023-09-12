@@ -453,7 +453,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
 
 void Mesh::UserWorkInLoop()
 {
-  Real rsecn, x1, x2, x3;
+  Real rsecn, x1, x2, x3, sinkSigmaAvg;
+  Real runningSigma = 0;
+  Real runningNSinkCells = 0;
   for (int bn = 0; bn < nblocal; ++bn)
   {
     MeshBlock *pmb = my_blocks(bn);
@@ -471,24 +473,46 @@ void Mesh::UserWorkInLoop()
           rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
           if (rsecn < rSink)
           {
-            pmb->phydro->w(IVX, k, j, i) = 0;
-            pmb->phydro->w(IVY, k, j, i) = 0;
-            pmb->phydro->w(IVZ, k, j, i) = 0;
-
-            // USES BAROTROPIC EOS
-            pmb->phydro->w(IDN, k, j, i) = sink_dens;
-            pmb->phydro->w(IPR, k, j, i) = sink_dens * CS02;
-
-            pmb->phydro->u(IDN, k, j, i) = sink_dens;
-            pmb->phydro->u(IM1, k, j, i) = 0;
-            pmb->phydro->u(IM2, k, j, i) = 0;
-            pmb->phydro->u(IM3, k, j, i) = 0;
-            pmb->phydro->u(IDN, k, j, i) = sink_dens;
+            runningSigma += pmb->phydro->w(IDN, k, j, i);
+            runningNSinkCells += 1;
           }
         }
       }
     }
-    //}
+  }
+  sinkSigmaAvg = runningSigma / runningNSinkCells;
+  for (int bn = 0; bn < nblocal; ++bn)
+  {
+    MeshBlock *pmb = my_blocks(bn);
+    // LogicalLocation &loc = pmb->loc;
+    // if (loc.level == nLevel) { // lowest level
+    for (int k = pmb->ks; k <= pmb->ke; k++)
+    {
+      x3 = pmb->pcoord->x3v(k);
+      for (int j = pmb->js; j <= pmb->je; j++)
+      {
+        x2 = pmb->pcoord->x2v(j);
+        for (int i = pmb->is; i <= pmb->ie; i++)
+        {
+          x1 = pmb->pcoord->x1v(i);
+          rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
+          if (rsecn < rSink)
+          {
+            // Primitive variables
+            pmb->phydro->w(IDN, k, j, i) = sinkSigmaAvg * sink_dens;
+            pmb->phydro->w(IVX, k, j, i) = 0;
+            pmb->phydro->w(IVY, k, j, i) = 0;
+            pmb->phydro->w(IVZ, k, j, i) = 0;
+
+            // Conserved variables
+            pmb->phydro->u(IDN, k, j, i) = sinkSigmaAvg * sink_dens;
+            pmb->phydro->u(IM1, k, j, i) = 0;
+            pmb->phydro->u(IM2, k, j, i) = 0;
+            pmb->phydro->u(IM3, k, j, i) = 0;
+          }
+        }
+      }
+    }
   }
   return;
 }
