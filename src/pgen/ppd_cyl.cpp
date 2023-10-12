@@ -35,7 +35,7 @@ namespace
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
   Real rSink, rEval, sink_dens, r_exclude, nu_iso;
-  Real vrMultiplyInner, vrMultiplyOuter;
+  Real l0inner, l0outer, MdotMultiplyInner, MdotMultiplyOuter;
   int nPtEval;
 } // namespace
 
@@ -98,8 +98,10 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   x1min = pin->GetReal("mesh", "x1min");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   T_damp_in = pin->GetReal("problem", "T_damp_in");
-  vrMultiplyInner = pin->GetReal("problem", "vrMultiplyInner");
-  vrMultiplyOuter = pin->GetReal("problem", "vrMultiplyOuter");
+  l0inner = pin->GetReal("problem", "l0_inner");
+  l0outer = pin->GetReal("problem", "l0_outer");
+  MdotMultiplyInner = pin->GetReal("problem", "MdotMultiplyInner");
+  MdotMultiplyOuter = pin->GetReal("problem", "MdotMultiplyOuter");
   // Sink parameters.
   rSink = pin->GetReal("problem", "sink_radius");
   rEval = pin->GetReal("problem", "eval_radius");
@@ -148,7 +150,18 @@ Real splineKernel(Real x)
 Real DenProf(const Real rad)
 {
   // Density profile Sigma(r)
-  return (std::max(Sig0 * std::pow(rad / R0, dslope), dfloor));
+  if ((rad <= innerbdy) and (innerbdy != x1min))
+  {
+    return (std::max(MdotMultiplyInner * (1 - l0inner / sqrt(rad)), dfloor));
+  }
+  if ((rad >= WDL1) and (WDL2 != WDL1))
+  {
+    return (std::max(MdotMultiplyOuter * (1 - l0outer / sqrt(rad)), dfloor));
+  }
+  else
+  {
+    return (std::max(Sig0 * std::pow(rad / R0, dslope), dfloor));
+  }
 }
 
 Real VelProf(const Real rad)
@@ -160,7 +173,18 @@ Real VelProf(const Real rad)
 Real RadVelProf(const Real rad)
 {
   // Velocity profile v(r)
-  return -3 * nu_iso / (2 * rad);
+  if ((rad <= innerbdy) and (innerbdy != x1min))
+  {
+    return (-3 * nu_iso / (2 * rad) / (1 - l0inner / sqrt(rad)));
+  }
+  if ((rad >= WDL1) and (WDL2 != WDL1))
+  {
+    return (-3 * nu_iso / (2 * rad) / (1 - l0outer / sqrt(rad)));
+  }
+  else
+  {
+    return -3 * nu_iso / (2 * rad);
+  }
 }
 
 Real Measurements(MeshBlock *pmb, int iout)
@@ -390,7 +414,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
           Real factor = splineKernel(x);
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_in;
-          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i) - Sig0 * (vr0 * vrMultiplyInner)) / T_damp_in;
+          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_in;
           cons(IM2, k, j, i) +=
               -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_in;
         }
@@ -401,7 +425,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
           cons(IDN, k, j, i) +=
               -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_bdy;
           cons(IM1, k, j, i) +=
-              -factor * dt * (cons(IM1, k, j, i) - Sig0 * (vr0 * vrMultiplyOuter)) / T_damp_bdy;
+              -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_bdy;
           cons(IM2, k, j, i) +=
               -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_bdy;
         }
@@ -436,11 +460,11 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
 
         if (x1 < innerbdy)
         {
-          phydro->u(IM1, k, j, i) = Sig * vr0 * vrMultiplyInner;
+          phydro->u(IM1, k, j, i) = Sig * vr0;
         }
         else if (x1 > WDL1)
         {
-          phydro->u(IM1, k, j, i) = Sig * vr0 * vrMultiplyOuter;
+          phydro->u(IM1, k, j, i) = Sig * vr0;
         }
         else
         {
@@ -534,7 +558,7 @@ void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         vr0 = RadVelProf(rprim);
 
         prim(IDN, k, j, il - i) = Sig;
-        prim(IM1, k, j, il - i) = (vr0 * vrMultiplyInner);
+        prim(IM1, k, j, il - i) = vr0;
         prim(IM2, k, j, il - i) = vk;
         prim(IM3, k, j, il - i) = 0.;
       }
@@ -563,7 +587,7 @@ void DiskOuterX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
         vr0 = RadVelProf(rprim);
 
         prim(IDN, k, j, iu + i) = Sig;
-        prim(IM1, k, j, iu + i) = (vr0 * vrMultiplyOuter);
+        prim(IM1, k, j, iu + i) = vr0;
         prim(IM2, k, j, iu + i) = vk;
         prim(IM3, k, j, iu + i) = 0.;
       }
