@@ -152,11 +152,11 @@ Real DenProf(const Real rad)
   // Density profile Sigma(r)
   if ((rad <= innerbdy) and (innerbdy != x1min))
   {
-    return (std::max(MdotMultiplyInner * (1 - l0inner / sqrt(rad)), dfloor));
+    return (std::max(MdotMultiplyInner * (1 - (l0inner) / (sqrt(rad))), dfloor));
   }
   if ((rad >= WDL1) and (WDL2 != WDL1))
   {
-    return (std::max(MdotMultiplyOuter * (1 - l0outer / sqrt(rad)), dfloor));
+    return (std::max(MdotMultiplyOuter * (1 - (l0outer) / (sqrt(rad))), dfloor));
   }
   else
   {
@@ -175,11 +175,11 @@ Real RadVelProf(const Real rad)
   // Velocity profile v(r)
   if ((rad <= innerbdy) and (innerbdy != x1min))
   {
-    return (-3 * nu_iso / (2 * rad) / (1 - l0inner / sqrt(rad)));
+    return (-3 * nu_iso / (2 * rad) / (1 - (l0inner) / (sqrt(rad))));
   }
   if ((rad >= WDL1) and (WDL2 != WDL1))
   {
-    return (-3 * nu_iso / (2 * rad) / (1 - l0outer / sqrt(rad)));
+    return (-3 * nu_iso / (2 * rad) / (1 - (l0outer) / (sqrt(rad) )));
   }
   else
   {
