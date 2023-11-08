@@ -179,7 +179,7 @@ Real RadVelProf(const Real rad)
   }
   if ((rad >= WDL1) and (WDL2 != WDL1))
   {
-    return (-3 * nu_iso / (2 * rad) / (1 - (l0outer) / (sqrt(rad) )));
+    return (-3 * nu_iso / (2 * rad) / (1 - (l0outer) / (sqrt(rad))));
   }
   else
   {
@@ -293,9 +293,8 @@ Real Measurements(MeshBlock *pmb, int iout)
               FxEvals[l] = -((2 * PI) * rEval / nPtEval / Sig) *
                            (momxEvaldir * momxEvaldir * std::cos(angEval) +
                             momxEvaldir * momyEvaldir * std::sin(angEval));
-              FyEvals[l] = -((2 * PI) * rEval / nPtEval / Sig) *
-                           (momyEvaldir * momxEvaldir * std::cos(angEval) +
-                            momyEvaldir * momyEvaldir * std::sin(angEval));
+              FyEvals[l] = -((2 * PI) * rEval / nPtEval) *
+                           (momyEvaldir / Sig + Omega0 * x1) * (momxEvaldir * std::cos(angEval) + momyEvaldir * std::sin(angEval));
 
               // Accretion rate
               mDotEvalVals[l] = -((2 * PI) / nPtEval) * rEval *
