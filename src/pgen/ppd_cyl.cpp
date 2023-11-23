@@ -35,7 +35,7 @@ namespace
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
   Real rSink, rEval, sink_dens, r_exclude, nu_iso;
-  Real l0inner, l0outer, MdotMultiplyInner, MdotMultiplyOuter;
+  Real l0ss, MdotMultiplyInner, MdotMultiplyOuter;
   int nPtEval;
 } // namespace
 
@@ -98,8 +98,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   x1min = pin->GetReal("mesh", "x1min");
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   T_damp_in = pin->GetReal("problem", "T_damp_in");
-  l0inner = pin->GetReal("problem", "l0_inner");
-  l0outer = pin->GetReal("problem", "l0_outer");
+  l0ss = pin->GetReal("problem", "l0SteadyState");
   MdotMultiplyInner = pin->GetReal("problem", "MdotMultiplyInner");
   MdotMultiplyOuter = pin->GetReal("problem", "MdotMultiplyOuter");
   // Sink parameters.
@@ -150,18 +149,7 @@ Real splineKernel(Real x)
 Real DenProf(const Real rad)
 {
   // Density profile Sigma(r)
-  if ((rad <= innerbdy) and (innerbdy != x1min))
-  {
-    return (std::max(MdotMultiplyInner * (1 - (l0inner) / (sqrt(rad))), dfloor));
-  }
-  if ((rad >= WDL1) and (WDL2 != WDL1))
-  {
-    return (std::max(MdotMultiplyOuter * (1 - (l0outer) / (sqrt(rad))), dfloor));
-  }
-  else
-  {
-    return (std::max(Sig0 * std::pow(rad / R0, dslope), dfloor));
-  }
+  return (std::max(MdotMultiplyInner * (1 - (l0ss) / (sqrt(rad))), dfloor));
 }
 
 Real VelProf(const Real rad)
@@ -172,19 +160,7 @@ Real VelProf(const Real rad)
 
 Real RadVelProf(const Real rad)
 {
-  // Velocity profile v(r)
-  if ((rad <= innerbdy) and (innerbdy != x1min))
-  {
-    return (-3 * nu_iso / (2 * rad) / (1 - (l0inner) / (sqrt(rad))));
-  }
-  if ((rad >= WDL1) and (WDL2 != WDL1))
-  {
-    return (-3 * nu_iso / (2 * rad) / (1 - (l0outer) / (sqrt(rad))));
-  }
-  else
-  {
-    return -3 * nu_iso / (2 * rad);
-  }
+  return (-3 * nu_iso / (2 * rad) / (1 - (l0ss) / (sqrt(rad))));
 }
 
 Real Measurements(MeshBlock *pmb, int iout)
