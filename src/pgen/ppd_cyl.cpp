@@ -149,7 +149,7 @@ Real splineKernel(Real x)
 Real DenProf(const Real rad)
 {
   // Density profile Sigma(r)
-  return (std::max(MdotMultiplyInner * (1 - (l0ss) / (sqrt(rad))), dfloor));
+  return (std::max(MdotMultiplyInner * (1 - (l0ss) / (rad * (VelProf(rad) + Omega0 * rad))), dfloor));
 }
 
 Real VelProf(const Real rad)
@@ -160,7 +160,7 @@ Real VelProf(const Real rad)
 
 Real RadVelProf(const Real rad)
 {
-  return (-3 * nu_iso / (2 * rad) / (1 - (l0ss) / (sqrt(rad))));
+  return (-3 * nu_iso / (2 * rad) / (1 - (l0ss) / (rad * (VelProf(rad) + Omega0 * rad))));
 }
 
 Real Measurements(MeshBlock *pmb, int iout)
@@ -430,21 +430,9 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
         vr0 = RadVelProf(rprim);
 
         phydro->u(IDN, k, j, i) = Sig;
+        phydro->u(IM1, k, j, i) = Sig * vr0;
         phydro->u(IM2, k, j, i) = Sig * vk;
         phydro->u(IM3, k, j, i) = 0.;
-
-        if (x1 < innerbdy)
-        {
-          phydro->u(IM1, k, j, i) = Sig * vr0;
-        }
-        else if (x1 > WDL1)
-        {
-          phydro->u(IM1, k, j, i) = Sig * vr0;
-        }
-        else
-        {
-          phydro->u(IM1, k, j, i) = 0;
-        }
       }
     }
   }
