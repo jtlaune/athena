@@ -34,8 +34,7 @@ namespace
 {
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
-  Real rSink, rEval, sink_dens, r_exclude, nu_iso;
-  Real l0ss, MdotMultiplyInner, MdotMultiplyOuter;
+  Real rSink, rEval, sink_dens, r_exclude, nu_iso, l0ss;
   int nPtEval;
 } // namespace
 
@@ -99,8 +98,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   T_damp_bdy = pin->GetReal("problem", "T_damp_bdy");
   T_damp_in = pin->GetReal("problem", "T_damp_in");
   l0ss = pin->GetReal("problem", "l0SteadyState");
-  MdotMultiplyInner = pin->GetReal("problem", "MdotMultiplyInner");
-  MdotMultiplyOuter = pin->GetReal("problem", "MdotMultiplyOuter");
   // Sink parameters.
   rSink = pin->GetReal("problem", "sink_radius");
   rEval = pin->GetReal("problem", "eval_radius");
@@ -149,7 +146,7 @@ Real splineKernel(Real x)
 Real DenProf(const Real rad)
 {
   // Density profile Sigma(r)
-  return (std::max(MdotMultiplyInner * (1 - (l0ss) / (rad * (VelProf(rad) + Omega0 * rad))), dfloor));
+  return (std::max(Sig0 * (1 - (l0ss) / (rad * (VelProf(rad) + Omega0 * rad))), dfloor));
 }
 
 Real VelProf(const Real rad)
