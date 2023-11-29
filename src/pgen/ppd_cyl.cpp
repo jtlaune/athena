@@ -167,7 +167,21 @@ Real DenProf(const Real rad)
 Real VelProf(const Real rad)
 {
   // Velocity profile v(r)
-  return std::sqrt(dslope * CS02 + 1 / rad) - Omega0 * rad;
+  Real vp1;
+  if ((rad <= innerbdy) and (innerbdy != x1min))
+  {
+    vp1 = l0inner / 4 / (1 - l0inner / sqrt(rad));
+    return (1 / std::sqrt(rad) - Omega0 * rad + CS02 * vp1);
+  }
+  if ((rad >= WDL1) and (WDL2 != WDL1))
+  {
+    vp1 = l0outer / 4 / (1 - l0outer / sqrt(rad));
+    return (1 / std::sqrt(rad) - Omega0 * rad + CS02 * vp1);
+  }
+  else
+  {
+    return (1 / std::sqrt(rad) - Omega0);
+  }
 }
 
 Real RadVelProf(const Real rad)
