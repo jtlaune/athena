@@ -153,8 +153,7 @@ Real VelProf(const Real rad)
 {
   // Velocity profile v(r)
   Real vp1;
-  vp1 = -l0ss / (2 * rad * std::sqrt(rad)) *
-        std::pow(1 / std::sqrt(rad) - Omega0 * rad, -2) * (1 / (2 * std::sqrt(rad)) - 2 * Omega0 * rad);
+  vp1 = l0ss / 4 / (1 - l0ss / sqrt(rad));
   return (1 / std::sqrt(rad) - Omega0 * rad + CS02 * vp1);
 }
 
