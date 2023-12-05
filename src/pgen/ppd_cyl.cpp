@@ -35,7 +35,7 @@ namespace
   Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
   Real rSink, rEval, sink_dens, r_exclude, nu_iso;
-  Real l0inner, l0outer, MdotMultiplyInner, MdotMultiplyOuter;
+  Real l0inner, l0outer, MdotMultiplyInner, MdotMultiplyOuter, Tgrow;
   int nPtEval;
 } // namespace
 
@@ -84,6 +84,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   nu_iso = pin->GetReal("problem", "nu_iso");
   // Secondary parameters.
   gm1 = pin->GetReal("problem", "GM_s");
+  Tgrow = pin->GetReal("problem", "T_grow");
   soft_sat = pin->GetReal("problem", "soft_sat");
   // Disk parameters.
   Sig0 = pin->GetReal("problem", "Sigma_0");
@@ -224,6 +225,8 @@ Real Measurements(MeshBlock *pmb, int iout)
   Real mDotEvalVals[nPtEval];
   Real PxEvals[nPtEval];
   Real PyEvals[nPtEval];
+  Real Gm;
+  Real time = pmb->pmy_mesh->time;
 
   for (int l = 0; l < nPtEval; l++)
   {
@@ -232,6 +235,15 @@ Real Measurements(MeshBlock *pmb, int iout)
     FyEvals[l] = 0;
     PxEvals[l] = 0;
     PyEvals[l] = 0;
+  }
+
+  if (time < Tgrow)
+  {
+    Gm = gm1 * SQR(std::sin(PI * time / Tgrow));
+  }
+  else
+  {
+    Gm = gm1;
   }
 
   for (int k = ks; k <= ke; k++)
@@ -252,8 +264,8 @@ Real Measurements(MeshBlock *pmb, int iout)
 
         if (rsecn > r_exclude)
         {
-          Fmag = gm1 / rsoft / rsoft / rsoft;
-          // Fmag = gm1/rsecn/rsecn/rsecn;
+          Fmag = Gm / rsoft / rsoft / rsoft;
+          // Fmag = Gm/rsecn/rsecn/rsecn;
           F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
           F_y += Sig * vol * Fmag * x1 * std::sin(x2);
         }
@@ -377,6 +389,17 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
   Real vk, vr, vr0, vth, Sig, Sig0, rprim, rsecn;
   Real x1, x2, x3;
   Real Fpr, Cs;
+  Real Gm;
+
+  if (time < Tgrow)
+  {
+    Gm = gm1 * SQR(std::sin(PI * time / Tgrow));
+  }
+  else
+  {
+    Gm = gm1;
+  }
+
   for (int k = pmb->ks; k <= pmb->ke; ++k)
   {
     x3 = pmb->pcoord->x3v(k);
@@ -411,14 +434,14 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM2, k, j, i) += -2 * dt * Sig * Omega0 * vr;
 
         // Satellite gravity, softened by soft_sat.
-        Cs = gm1 / (rsecn * rsecn + soft_sat * soft_sat) /
+        Cs = Gm / (rsecn * rsecn + soft_sat * soft_sat) /
              std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
         cons(IM1, k, j, i) += Sig * dt * Cs * (std::cos(x2) * R0 - x1);
         cons(IM2, k, j, i) += -Sig * dt * Cs * R0 * std::sin(x2);
 
         // Indirect terms arising from primary acceleration in +x direction.
-        cons(IM1, k, j, i) += -gm1 * dt * Sig * std::cos(x2) / (R0 * R0);
-        cons(IM2, k, j, i) += +gm1 * dt * Sig * std::sin(x2) / (R0 * R0);
+        cons(IM1, k, j, i) += -Gm * dt * Sig * std::cos(x2) / (R0 * R0);
+        cons(IM2, k, j, i) += +Gm * dt * Sig * std::sin(x2) / (R0 * R0);
 
         // Wave damping regions.
         if ((rprim <= innerbdy) and (innerbdy != x1min))
