@@ -181,7 +181,7 @@ Real VelProf(const Real rad)
   }
   else
   {
-    return (1 / std::sqrt(rad) - Omega0);
+    return (1 / std::sqrt(rad) - Omega0 * rad);
   }
 }
 
