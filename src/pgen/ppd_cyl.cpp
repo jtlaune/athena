@@ -239,7 +239,7 @@ Real Measurements(MeshBlock *pmb, int iout)
 
   if (time < Tgrow)
   {
-    Gm = gm1 * SQR(std::sin(PI * time / Tgrow));
+    Gm = gm1 * SQR(std::sin(PI * time / Tgrow / 2));
   }
   else
   {
@@ -393,7 +393,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 
   if (time < Tgrow)
   {
-    Gm = gm1 * SQR(std::sin(PI * time / Tgrow));
+    Gm = gm1 * SQR(std::sin(PI * time / Tgrow / 2));
   }
   else
   {
