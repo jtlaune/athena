@@ -420,7 +420,7 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 
         // Primary gravity.
         // No softening because it is off-grid.
-        Fpr = -1. / rprim / rprim;
+        Fpr = -(1.-Gm) / rprim / rprim;
         cons(IM1, k, j, i) += dt * Sig * Fpr;
         cons(IM2, k, j, i) += 0;
 
