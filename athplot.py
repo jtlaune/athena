@@ -205,6 +205,7 @@ class rawDataRestricted:
                     self.filename,
                     level=lev - 1,
                     fast_restrict=True,
+                    #fast_restrict=False,
                     quantities=self.quantities,
                     max_level=min(self.max_level, lev - 1 + self.block_refine_limit),
                     x1_min=bounding_box[0][0],

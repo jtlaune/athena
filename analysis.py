@@ -1,9 +1,11 @@
 import sys
 import numpy as np
+
 sys.path.insert(0, "/home/astrosun/jtlaune/athena/")
 import athplot
 
-def reduceProfiles(filename):
+
+def reduceProfiles(filename, nu, q):
     """Takes an hdf5 athdf filename, restricts it to the base grid, and calculates Jdots, Mdot, the j profile.
 
     Returns: dictionary with keys
@@ -32,15 +34,17 @@ def reduceProfiles(filename):
     Tgrav_gtrr = np.zeros(RR.shape[1])
     Mdot = np.zeros(RR.shape[1])
     jProf = np.zeros(RR.shape[1])
-
+    SigProf = np.zeros(RR.shape[1])
+    vrProf = np.zeros(RR.shape[1])
+    vpProf = np.zeros(RR.shape[1])
+    dvphi_rdrProf = np.zeros(RR.shape[1])
+    dvrdphiProf = np.zeros(RR.shape[1])
     dRR = np.gradient(RR, axis=1, edge_order=2)
     dPHI = np.gradient(PHI, axis=0, edge_order=2)
 
-    q = 1e-4
     GPOT = -q / np.sqrt(1 + RR**2 - 2 * RR * np.cos(PHI)) - 1 / RR
     dGPOTdPHI = np.gradient(GPOT, PHI[:, 0], axis=0, edge_order=2)
 
-    nu = 1e-4
     for i in range(Nr):
         for j in range(Nphi):
             r = RR[j, i]
@@ -62,6 +66,11 @@ def reduceProfiles(filename):
             dTgravdr[i] += -r * Sig * dpotdphi * dphi
             Mdot[i] += -r * vr * Sig * dphi
             jProf[i] += (r * vphi * dphi) / (2 * np.pi)
+            SigProf[i] += Sig * dphi / (2 * np.pi)
+            vrProf[i] += vr * dphi / (2 * np.pi)
+            vpProf[i] += vphi * dphi / (2 * np.pi)
+            dvphi_rdrProf[i] += dvphi_rdr * dphi / (2 * np.pi)
+            dvrdphiProf[i] += dvrdphi * dphi / (2 * np.pi)
 
     for i in range(Nr):
         for j in range(Nr - i):
@@ -69,11 +78,17 @@ def reduceProfiles(filename):
             Tgrav_gtrr[i] += dTgravdr[i + j] * dr
 
     return {
+        "dvphi_rdr": dvphi_rdrProf,
+        "dvrdphi": dvrdphiProf,
         "JdotAdv": JdotAdv,
         "JdotVisc": JdotVisc,
         "dTgravdr": dTgravdr,
         "Tgrav_gtrr": Tgrav_gtrr,
+        "Jdot": JdotAdv - JdotVisc - Tgrav_gtrr,
         "Mdot": Mdot,
         "jProf": jProf,
-        "r":RR[0,:],
+        "r": RR[0, :],
+        "Sig": SigProf,
+        "vr": vrProf,
+        "vp": vpProf,
     }
