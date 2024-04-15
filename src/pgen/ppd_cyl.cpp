@@ -450,6 +450,16 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM2, k, j, i) += +Gm * dt * Sig * std::sin(x2) / (SMA * SMA);
 
         // Wave damping regions.
+        if ((rprim <= innerbdy) and (innerbdy != x1min))
+        {
+          Real x = (rprim - x1min) / (innerbdy - x1min);
+          Real factor = splineKernel(x);
+          cons(IDN, k, j, i) +=
+              -factor * dt * (cons(IDN, k, j, i) - Sig0) / T_damp_in;
+          cons(IM1, k, j, i) += -factor * dt * (cons(IM1, k, j, i) - Sig0 * vr0) / T_damp_in;
+          cons(IM2, k, j, i) +=
+              -factor * dt * (cons(IM2, k, j, i) - Sig0 * vk) / T_damp_in;
+        }
         if ((rprim >= WDL1) and (WDL2 != WDL1))
         {
           Real x = 1 - (rprim - WDL1) / (WDL2 - WDL1);
@@ -605,50 +615,30 @@ int RefinementCondition(MeshBlock *pmb)
   return (cond);
 }
 
-/*
-  d/dr^2=0 on all quantities (linear extension into ghost zones).
-*/
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
                  FaceField &b, Real time, Real dt, int il, int iu, int jl,
                  int ju, int kl, int ku, int ngh)
 {
-  Real x1, x2, x3;
-  Real SigSlope, vrSlope, vkSlope, dx;
-  Real Sig, vk, vr;
-  Real r_active = pco->x1v(il);
+  Real Sig, vk, vr0, rprim, x1, x2, x3, Cx, Cy;
   for (int k = kl; k <= ku; ++k)
   {
     x3 = pco->x3v(k);
     for (int j = jl; j <= ju; ++j)
     {
       x2 = pco->x2v(j);
-
-      dx = pco->x1v(il + 1) - pco->x1v(il);
-
-      SigSlope = (prim(IDN, k, j, il + 1) - prim(IDN, k, j, il)) / dx;
-      vrSlope = (prim(IVX, k, j, il + 1) - prim(IVX, k, j, il)) / dx;
-      vkSlope = (prim(IVY, k, j, il + 1) - prim(IVY, k, j, il)) / dx;
-
-      Sig = prim(IDN, k, j, il);
-      vr = prim(IVX, k, j, il);
-      vk = prim(IVY, k, j, il);
-
       for (int i = 1; i <= ngh; ++i)
       {
         x1 = pco->x1v(il - i);
 
-        prim(IDN, k, j, il - i) = Sig + (x1 - r_active) * SigSlope;
-        prim(IVY, k, j, il - i) = vk + (x1 - r_active) * vkSlope;
-        prim(IVZ, k, j, il - i) = 0.;
+        rprim = x1;
+        Sig = DenProf(rprim);
+        vk = VelProf(rprim);
+        vr0 = RadVelProf(rprim);
 
-        if (vr >= 0)
-        {
-          prim(IVX, k, j, il - i) = 0;
-        }
-        else
-        {
-          prim(IVX, k, j, il - i) = vr + (x1 - r_active) * vrSlope;
-        }
+        prim(IDN, k, j, il - i) = Sig;
+        prim(IM1, k, j, il - i) = vr0;
+        prim(IM2, k, j, il - i) = vk;
+        prim(IM3, k, j, il - i) = 0.;
       }
     }
   }
