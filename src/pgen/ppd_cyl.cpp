@@ -32,7 +32,7 @@
 
 namespace
 {
-  Real gm1, Sig0, dslope, dfloor, R0, CS02, Omega0, soft_sat;
+  Real gm1, Sig0, dslope, dfloor, SMA, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
   Real rSink, rEval, sink_dens, r_exclude, nu_iso;
   Real l0inner, l0outer, MdotMultiplyInner, MdotMultiplyOuter, Tgrow;
@@ -89,7 +89,8 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   // Disk parameters.
   Sig0 = pin->GetReal("problem", "Sigma_0");
   dslope = pin->GetReal("problem", "delta");
-  R0 = pin->GetReal("problem", "R0");
+  SMA = pin->GetReal("problem", "SMA");
+  ECC = pin->GetReal("problem", "ECC");
   Omega0 = pin->GetReal("problem", "Omega0");
   CS02 = SQR(pin->GetReal("hydro", "iso_sound_speed"));
   // Boundary conditions.
@@ -161,7 +162,7 @@ Real DenProf(const Real rad)
   }
   else
   {
-    return (std::max(Sig0 * std::pow(rad / R0, dslope), dfloor));
+    return (std::max(Sig0 * std::pow(rad / SMA, dslope), dfloor));
   }
 }
 
@@ -259,14 +260,14 @@ Real Measurements(MeshBlock *pmb, int iout)
         Sig = pmb->phydro->u(IDN, k, j, i);
         vol = pmb->pcoord->GetCellVolume(k, j, i);
 
-        rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
+        rsecn = std::sqrt(x1 * x1 + SMA * SMA - 2 * SMA * x1 * std::cos(x2));
         rsoft = std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
 
         if (rsecn > r_exclude)
         {
           Fmag = Gm / rsoft / rsoft / rsoft;
           // Fmag = Gm/rsecn/rsecn/rsecn;
-          F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - R0);
+          F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - SMA);
           F_y += Sig * vol * Fmag * x1 * std::sin(x2);
         }
 
@@ -278,7 +279,7 @@ Real Measurements(MeshBlock *pmb, int iout)
             angEval = 2 * PI / nPtEval * l;
 
             // sample locus of circle at secondary with radius rEval
-            xEval = rEval * std::cos(angEval) + R0;
+            xEval = rEval * std::cos(angEval) + SMA;
             yEval = rEval * std::sin(angEval);
 
             rf1 = pmb->pcoord->x1f(i);
@@ -390,6 +391,8 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
   Real x1, x2, x3;
   Real Fpr, Cs;
   Real Gm;
+  Real rp, phip;
+  Real time = pmb->pmy_mesh->time;
 
   if (time < Tgrow)
   {
@@ -410,9 +413,12 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
       {
         x1 = pmb->pcoord->x1v(i);
 
+        rp = SMA * (1 - ECC * std::sin(time));
+        phip = -2 * ECC * std::cos(time);
+
         rprim = x1;
         rsecn =
-            std::sqrt(rprim * rprim + R0 * R0 - 2 * R0 * rprim * std::cos(x2));
+            std::sqrt(rprim * rprim + rp * rp - 2 * rp * rprim * std::cos(x2 - phip));
         vk = VelProf(rprim);
         Sig0 = DenProf(rprim);
         Sig = prim(IDN, k, j, i);
@@ -436,12 +442,13 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         // Satellite gravity, softened by soft_sat.
         Cs = Gm / (rsecn * rsecn + soft_sat * soft_sat) /
              std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
-        cons(IM1, k, j, i) += Sig * dt * Cs * (std::cos(x2) * R0 - x1);
-        cons(IM2, k, j, i) += -Sig * dt * Cs * R0 * std::sin(x2);
+        cons(IM1, k, j, i) += Sig * dt * Cs * (rp * cos(phip - x2) - x1);
+        cons(IM2, k, j, i) += Sig * dt * Cs * rp * sin(phip - x2);
 
         // Indirect terms arising from primary acceleration in +x direction.
-        cons(IM1, k, j, i) += -Gm * dt * Sig * std::cos(x2) / (R0 * R0);
-        cons(IM2, k, j, i) += +Gm * dt * Sig * std::sin(x2) / (R0 * R0);
+        // TODO: FIX THIS FOR AN ECCENTRIC PLANET? Can it be fixed? Does it matter?
+        cons(IM1, k, j, i) += -Gm * dt * Sig * std::cos(x2) / (SMA * SMA);
+        cons(IM2, k, j, i) += +Gm * dt * Sig * std::sin(x2) / (SMA * SMA);
 
         // Wave damping regions.
         if ((rprim >= WDL1) and (WDL2 != WDL1))
@@ -504,6 +511,8 @@ void MeshBlock::ProblemGenerator(ParameterInput *pin)
 void Mesh::UserWorkInLoop()
 {
   Real rsecn, x1, x2, x3;
+  Real rp, phip;
+
   for (int bn = 0; bn < nblocal; ++bn)
   {
     MeshBlock *pmb = my_blocks(bn);
@@ -518,7 +527,13 @@ void Mesh::UserWorkInLoop()
         for (int i = pmb->is; i <= pmb->ie; i++)
         {
           x1 = pmb->pcoord->x1v(i);
-          rsecn = std::sqrt(x1 * x1 + R0 * R0 - 2 * R0 * x1 * std::cos(x2));
+
+          rp = SMA * (1 - ECC * std::sin(time));
+          phip = -2 * ECC * std::cos(time);
+
+          rsecn =
+              std::sqrt(x1 * x1 + rp * rp - 2 * rp * x1 * std::cos(x2 - phip));
+
           if (rsecn < rSink)
           {
             pmb->phydro->w(IVX, k, j, i) = 0;
@@ -550,11 +565,11 @@ int RefinementCondition(MeshBlock *pmb)
   Real x2min = pmb->pcoord->x2v(pmb->js);
   Real x2max = pmb->pcoord->x2v(pmb->je);
   Real cond = 0;
-  if ((x1min < (R0 + l_refine)) and (x1max > (R0 - l_refine)))
+  if ((x1min < (SMA + l_refine)) and (x1max > (SMA - l_refine)))
   {
     // radial band
-    if ((x2min < 2 * PI * l_refine / R0) and
-        (x2max > -2 * PI * l_refine / R0))
+    if ((x2min < 2 * PI * l_refine / SMA) and
+        (x2max > -2 * PI * l_refine / SMA))
     {
       // azimuthal band
       cond = 1;
