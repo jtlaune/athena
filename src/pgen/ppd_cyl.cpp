@@ -32,7 +32,7 @@
 
 namespace
 {
-  Real gm1, Sig0, dslope, dfloor, SMA, CS02, Omega0, soft_sat;
+  Real gm1, Sig0, dslope, dfloor, ECC, SMA, CS02, Omega0, soft_sat;
   Real T_damp_in, T_damp_bdy, WDL1, WDL2, innerbdy, x1min, l_refine;
   Real rSink, rEval, sink_dens, r_exclude, nu_iso;
   Real l0inner, l0outer, MdotMultiplyInner, MdotMultiplyOuter, Tgrow;
@@ -392,7 +392,6 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
   Real Fpr, Cs;
   Real Gm;
   Real rp, phip;
-  Real time = pmb->pmy_mesh->time;
 
   if (time < Tgrow)
   {
@@ -560,22 +559,48 @@ void Mesh::UserWorkInLoop()
 
 int RefinementCondition(MeshBlock *pmb)
 {
-  Real x1min = pmb->pcoord->x1v(pmb->is);
-  Real x1max = pmb->pcoord->x1v(pmb->ie);
-  Real x2min = pmb->pcoord->x2v(pmb->js);
-  Real x2max = pmb->pcoord->x2v(pmb->je);
+  int is = pmb->is, ie = pmb->ie, js = pmb->js, je = pmb->je, ks = pmb->ks,
+      ke = pmb->ke;
+  Real x1, x2, x3;
+  Real rp, phip, rsecn;
   Real time = pmb->pmy_mesh->time;
   Real cond = 0;
 
   rp = SMA * (1 - ECC * std::sin(time));
   phip = -2 * ECC * std::cos(time);
 
-  rsecn =
-      std::sqrt(x1 * x1 + rp * rp - 2 * rp * x1 * std::cos(x2 - phip));
-
-  if (rsecn < 2 * l_refine)
+  for (int k = ks; k <= ke; k++)
   {
-    cond = 1;
+    if (cond == 1)
+    {
+      break;
+    }
+    x3 = pmb->pcoord->x3v(k);
+    for (int j = js; j <= je; j++)
+    {
+      if (cond == 1)
+      {
+        break;
+      }
+      x2 = pmb->pcoord->x2v(j);
+      for (int i = is; i <= ie; i++)
+      {
+        if (cond == 1)
+        {
+          break;
+        }
+        x1 = pmb->pcoord->x1v(i);
+
+        rsecn =
+            std::sqrt(x1 * x1 + rp * rp - 2 * rp * x1 * std::cos(x2 - phip));
+
+        if (rsecn < 2 * l_refine)
+        {
+          cond = 1;
+          break;
+        }
+      }
+    }
   }
   return (cond);
 }
