@@ -564,16 +564,18 @@ int RefinementCondition(MeshBlock *pmb)
   Real x1max = pmb->pcoord->x1v(pmb->ie);
   Real x2min = pmb->pcoord->x2v(pmb->js);
   Real x2max = pmb->pcoord->x2v(pmb->je);
+  Real time = pmb->pmy_mesh->time;
   Real cond = 0;
-  if ((x1min < (SMA + l_refine)) and (x1max > (SMA - l_refine)))
+
+  rp = SMA * (1 - ECC * std::sin(time));
+  phip = -2 * ECC * std::cos(time);
+
+  rsecn =
+      std::sqrt(x1 * x1 + rp * rp - 2 * rp * x1 * std::cos(x2 - phip));
+
+  if (rsecn < 2 * l_refine)
   {
-    // radial band
-    if ((x2min < 2 * PI * l_refine / SMA) and
-        (x2max > -2 * PI * l_refine / SMA))
-    {
-      // azimuthal band
-      cond = 1;
-    }
+    cond = 1;
   }
   return (cond);
 }
