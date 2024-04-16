@@ -604,7 +604,7 @@ int RefinementCondition(MeshBlock *pmb)
         rsecn =
             std::sqrt(x1 * x1 + rp * rp - 2 * rp * x1 * std::cos(x2 - phip));
 
-        if (rsecn < 2 * l_refine)
+        if (rsecn < l_refine)
         {
           cond = 1;
           break;
