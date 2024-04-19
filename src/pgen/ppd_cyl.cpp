@@ -271,8 +271,8 @@ Real Measurements(MeshBlock *pmb, int iout)
         {
           Fmag = Gm / rsoft / rsoft / rsoft;
           // Fmag = Gm/rsecn/rsecn/rsecn;
-          F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - SMA);
-          F_y += Sig * vol * Fmag * x1 * std::sin(x2);
+          F_x += Sig * vol * Fmag * (std::cos(x2) * x1 - rp * std::cos(phip));
+          F_y += Sig * vol * Fmag * (x1 * std::sin(x2) - rp * std::sin(phip));
         }
 
         // For now, doing nearest neighbor.
@@ -283,8 +283,8 @@ Real Measurements(MeshBlock *pmb, int iout)
             angEval = 2 * PI / nPtEval * l;
 
             // sample locus of circle at secondary with radius rEval
-            xEval = rEval * std::cos(angEval) + SMA;
-            yEval = rEval * std::sin(angEval);
+            xEval = rEval * std::cos(angEval) + rp * std::cos(phip);
+            yEval = rEval * std::sin(angEval) + rp * std::sin(phip);
 
             rf1 = pmb->pcoord->x1f(i);
             rf2 = pmb->pcoord->x1f(i + 1);
