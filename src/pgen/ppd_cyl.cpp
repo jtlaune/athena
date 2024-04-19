@@ -597,7 +597,7 @@ int RefinementCondition(MeshBlock *pmb)
       }
     }
   }
-  return (0);
+  return (-1); // -1 means to de-refine
 }
 
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
