@@ -227,6 +227,7 @@ Real Measurements(MeshBlock *pmb, int iout)
   Real PxEvals[nPtEval];
   Real PyEvals[nPtEval];
   Real Gm;
+  Real phip, rp;
   Real time = pmb->pmy_mesh->time;
 
   for (int l = 0; l < nPtEval; l++)
@@ -260,7 +261,10 @@ Real Measurements(MeshBlock *pmb, int iout)
         Sig = pmb->phydro->u(IDN, k, j, i);
         vol = pmb->pcoord->GetCellVolume(k, j, i);
 
-        rsecn = std::sqrt(x1 * x1 + SMA * SMA - 2 * SMA * x1 * std::cos(x2));
+        rp = SMA * (1 - ECC * std::sin(time));
+        phip = -2 * ECC * std::cos(time);
+
+        rsecn = std::sqrt(x1 * x1 + rp * rp - 2 * rp * x1 * std::cos(x2 - phip));
         rsoft = std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
 
         if (rsecn > r_exclude)
@@ -301,7 +305,7 @@ Real Measurements(MeshBlock *pmb, int iout)
 
             if (InsideCell)
             {
-              // Go from polar -> local cartesian.
+              // Go from polar -> cartesian.
               // Because x2<<1 near the sink, this should not be a huge
               // adjustment.
               momxEvaldir = std::cos(x2) * (pmb->phydro->u(IM1, k, j, i)) -
@@ -316,17 +320,14 @@ Real Measurements(MeshBlock *pmb, int iout)
               PyEvals[l] = (2 * PI) * rEval / nPtEval * std::sin(angEval) *
                            (-CS02 * Sig);
 
-              // Force from accreted momentum
-              FxEvals[l] = -((2 * PI) * rEval / nPtEval / Sig) *
-                           (momxEvaldir * momxEvaldir * std::cos(angEval) +
-                            momxEvaldir * momyEvaldir * std::sin(angEval));
-              FyEvals[l] = -((2 * PI) * rEval / nPtEval) *
-                           (momyEvaldir / Sig + Omega0 * x1) * (momxEvaldir * std::cos(angEval) + momyEvaldir * std::sin(angEval));
-
               // Accretion rate
               mDotEvalVals[l] = -((2 * PI) / nPtEval) * rEval *
-                                ((momxEvaldir) * (std::cos(angEval)) +
-                                 (momyEvaldir) * (std::sin(angEval)));
+                                ((momxEvaldir - Sig * (-SMA * ECC * std::cos(time) * std::cos(phip) - 2 * rp * ECC * std::sin(time) * std::sin(phip))) * (std::cos(angEval)) +
+                                 (momyEvaldir - Sig * (-SMA * ECC * std::cos(time) * std::sin(phip) + 2 * rp * ECC * std::sin(time) * std::cos(phip))) * (std::sin(angEval)));
+
+              // Force from accreted momentum
+              FxEvals[l] = mDotEvalVals[l] * (1 / Sig) * (momxEvaldir - (-SMA * ECC * std::cos(time) * std::cos(phip) - 2 * rp * ECC * std::sin(time) * std::sin(phip)));
+              FyEvals[l] = mDotEvalVals[l] * (1 / Sig) * (momyEvaldir - (-SMA * ECC * std::cos(time) * std::sin(phip) + 2 * rp * ECC * std::sin(time) * std::cos(phip)));
             }
           }
         }
