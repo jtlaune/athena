@@ -68,7 +68,6 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   {
     EnrollUserRefinementCondition(RefinementCondition);
   }
-  AllocateUserHistoryOutput(7);
 
   // AMR parameters (not used if SMR).
   l_refine = pin->GetReal("problem", "l_refine");
@@ -388,32 +387,18 @@ int RefinementCondition(MeshBlock *pmb)
       ke = pmb->ke;
   Real x1, x2, x3;
   Real rp, phip, rsecn;
-  Real time = pmb->pmy_mesh->time;
-  Real cond = 0;
 
-  rp = SMA * (1 - ECC * std::sin(time));
-  phip = -2 * ECC * std::cos(time);
+  rp = SMA * (1 - ECC * std::sin(pmb->pmy_mesh->time));
+  phip = -2 * ECC * std::cos(pmb->pmy_mesh->time);
 
   for (int k = ks; k <= ke; k++)
   {
-    if (cond == 1)
-    {
-      break;
-    }
     x3 = pmb->pcoord->x3v(k);
     for (int j = js; j <= je; j++)
     {
-      if (cond == 1)
-      {
-        break;
-      }
       x2 = pmb->pcoord->x2v(j);
       for (int i = is; i <= ie; i++)
       {
-        if (cond == 1)
-        {
-          break;
-        }
         x1 = pmb->pcoord->x1v(i);
 
         rsecn =
@@ -421,13 +406,12 @@ int RefinementCondition(MeshBlock *pmb)
 
         if (rsecn < l_refine)
         {
-          cond = 1;
-          break;
+          return (1);
         }
       }
     }
   }
-  return (cond);
+  return (0);
 }
 
 void DiskInnerX1(MeshBlock *pmb, Coordinates *pco, AthenaArray<Real> &prim,
