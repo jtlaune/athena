@@ -446,8 +446,9 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
 
         // Indirect terms arising from primary acceleration in +x direction.
         // TODO: FIX THIS FOR AN ECCENTRIC PLANET? Can it be fixed? Does it matter?
-        cons(IM1, k, j, i) += -Gm * dt * Sig * std::cos(x2) / (SMA * SMA);
-        cons(IM2, k, j, i) += +Gm * dt * Sig * std::sin(x2) / (SMA * SMA);
+        // Yes, see Bailey et al. 2021 eq. 5 (fixing the r_* factor in the numerator)
+        cons(IM1, k, j, i) += -Gm * dt * Sig * std::cos(x2 - phip) / (rp * rp);
+        cons(IM2, k, j, i) += +Gm * dt * Sig * std::sin(x2 - phip) / (rp * rp);
 
         // Wave damping regions.
         if ((rprim <= innerbdy) and (innerbdy != x1min))
