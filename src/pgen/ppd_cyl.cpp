@@ -68,7 +68,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   {
     EnrollUserRefinementCondition(RefinementCondition);
   }
-  AllocateUserHistoryOutput(7);
+  AllocateUserHistoryOutput(8);
   EnrollUserHistoryOutput(0, Measurements, "Fx_pressure");
   EnrollUserHistoryOutput(1, Measurements, "Fy_pressure");
   EnrollUserHistoryOutput(2, Measurements, "Fs,grav_x=r");
@@ -76,6 +76,7 @@ void Mesh::InitUserMeshData(ParameterInput *pin)
   EnrollUserHistoryOutput(4, Measurements, "AccretionEval");
   EnrollUserHistoryOutput(5, Measurements, "momxAccretion");
   EnrollUserHistoryOutput(6, Measurements, "momyAccretion");
+  EnrollUserHistoryOutput(7, Measurements, "numInterp");
 
   // AMR parameters (not used if SMR).
   l_refine = pin->GetReal("problem", "l_refine");
@@ -229,6 +230,7 @@ Real Measurements(MeshBlock *pmb, int iout)
   Real Gm;
   Real phip, rp;
   Real time = pmb->pmy_mesh->time;
+  int numInterp=0;
 
   for (int l = 0; l < nPtEval; l++)
   {
@@ -300,6 +302,7 @@ Real Measurements(MeshBlock *pmb, int iout)
               if ((thf1 <= theval) && (theval < thf2))
               {
                 InsideCell = true;
+                numInterp += 1;
               }
             }
 
@@ -375,6 +378,10 @@ Real Measurements(MeshBlock *pmb, int iout)
   else if (iout == 6)
   {
     return momyRate;
+  }
+  else if (iout == 7)
+  {
+    return numInterp;
   }
   else
   {
