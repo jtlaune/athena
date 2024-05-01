@@ -230,7 +230,7 @@ Real Measurements(MeshBlock *pmb, int iout)
   Real Gm;
   Real phip, rp;
   Real time = pmb->pmy_mesh->time;
-  int numInterp = 0;
+  int numInterp=0;
 
   for (int l = 0; l < nPtEval; l++)
   {
@@ -329,9 +329,8 @@ Real Measurements(MeshBlock *pmb, int iout)
                                  (momyEvaldir - Sig * (-SMA * ECC * std::cos(time) * std::sin(phip) + 2 * rp * ECC * std::sin(time) * std::cos(phip))) * (std::sin(angEval)));
 
               // Force from accreted momentum
-              // v_g,rot + v_g,frame - v_p,rot
-              FxEvals[l] = mDotEvalVals[l] * (momxEvaldir / Sig - Omega0*x1*std::sin(x2) - (-SMA * ECC * std::cos(time) * std::cos(phip) - 2 * rp * ECC * std::sin(time) * std::sin(phip)));
-              FyEvals[l] = mDotEvalVals[l] * (momyEvaldir / Sig + Omega0*x1*std::cos(x2) - (-SMA * ECC * std::cos(time) * std::sin(phip) + 2 * rp * ECC * std::sin(time) * std::cos(phip)));
+              FxEvals[l] = mDotEvalVals[l] * (1 / Sig) * (momxEvaldir - (-SMA * ECC * std::cos(time) * std::cos(phip) - 2 * rp * ECC * std::sin(time) * std::sin(phip)));
+              FyEvals[l] = mDotEvalVals[l] * (1 / Sig) * (momyEvaldir - (-SMA * ECC * std::cos(time) * std::sin(phip) + 2 * rp * ECC * std::sin(time) * std::cos(phip)));
             }
           }
         }
