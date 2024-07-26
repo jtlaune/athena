@@ -424,15 +424,6 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         cons(IM1, k, j, i) += dt * Sig * Fpr;
         cons(IM2, k, j, i) += 0;
 
-        // Centrifugal force.
-        cons(IM1, k, j, i) += dt * Sig * Omega0 * Omega0 * rprim;
-
-        // Coriolis force.
-        vr = prim(IM1, k, j, i);
-        vth = prim(IM2, k, j, i);
-        cons(IM1, k, j, i) += 2 * dt * Sig * Omega0 * vth;
-        cons(IM2, k, j, i) += -2 * dt * Sig * Omega0 * vr;
-
         // Satellite gravity, softened by soft_sat.
         Cs = Gm / (rsecn * rsecn + soft_sat * soft_sat) /
              std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
