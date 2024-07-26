@@ -418,12 +418,6 @@ void DiskSourceFunction(MeshBlock *pmb, const Real time, const Real dt,
         Sig = prim(IDN, k, j, i);
         vr0 = RadVelProf(rprim);
 
-        // Primary gravity.
-        // No softening because it is off-grid.
-        Fpr = -(1.) / rprim / rprim;
-        cons(IM1, k, j, i) += dt * Sig * Fpr;
-        cons(IM2, k, j, i) += 0;
-
         // Satellite gravity, softened by soft_sat.
         Cs = Gm / (rsecn * rsecn + soft_sat * soft_sat) /
              std::sqrt(rsecn * rsecn + soft_sat * soft_sat);
